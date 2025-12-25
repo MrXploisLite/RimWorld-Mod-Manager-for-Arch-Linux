@@ -88,7 +88,7 @@ def main():
     # Import after dependency check
     from PyQt6.QtWidgets import QApplication
     from PyQt6.QtCore import Qt
-    from PyQt6.QtGui import QPalette, QColor
+    from PyQt6.QtGui import QPalette, QColor, QIcon
     
     from ui.main_window import MainWindow
     
@@ -98,6 +98,11 @@ def main():
     app.setApplicationDisplayName("RimModManager")
     app.setOrganizationName("RimModManager")
     app.setOrganizationDomain("rimmodmanager.app")
+    
+    # Set application icon
+    icon_path = project_dir / "resources" / "icon.svg"
+    if icon_path.exists():
+        app.setWindowIcon(QIcon(str(icon_path)))
     
     # Set up style
     app.setStyle("Fusion")

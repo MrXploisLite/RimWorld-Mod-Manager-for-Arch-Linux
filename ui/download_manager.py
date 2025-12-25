@@ -483,18 +483,29 @@ class DownloadLogWidget(QWidget):
         self._items.clear()
         self.log_text.clear()
         
+        self._log_info("Fetching mod names from Steam Workshop...")
+        
+        # Fetch mod names from Steam API
+        mod_names = self._fetch_mod_names(workshop_ids)
+        
         # Add items to queue
         for wid in workshop_ids:
-            item = DownloadItem(workshop_id=wid, name=f"Workshop Mod {wid}")
+            name = mod_names.get(wid, f"Workshop Mod {wid}")
+            item = DownloadItem(workshop_id=wid, name=name)
             self._items[wid] = item
             
             # Check if already exists
             existing_path = download_path / wid
             if existing_path.exists():
-                list_item = QListWidgetItem(f"📦 Mod {wid} - Already downloaded")
+                # Try to get name from local About.xml
+                local_name = get_mod_name_from_path(existing_path)
+                if local_name and local_name != wid:
+                    name = local_name
+                    item.name = name
+                list_item = QListWidgetItem(f"✓ {name} - Already downloaded")
                 list_item.setForeground(QColor("#888888"))
             else:
-                list_item = QListWidgetItem(f"⏳ Mod {wid} - Pending")
+                list_item = QListWidgetItem(f"⏳ {name} - Pending")
             
             list_item.setData(Qt.ItemDataRole.UserRole, wid)
             self.queue_list.addItem(list_item)
@@ -518,6 +529,45 @@ class DownloadLogWidget(QWidget):
         self._worker.start()
         
         self._log_info("Download manager started...")
+    
+    def _fetch_mod_names(self, workshop_ids: list[str]) -> dict[str, str]:
+        """Fetch mod names from Steam Workshop API."""
+        import urllib.request
+        import urllib.parse
+        import json
+        
+        names = {}
+        
+        try:
+            # Steam API endpoint
+            url = "https://api.steampowered.com/ISteamRemoteStorage/GetPublishedFileDetails/v1/"
+            
+            # Build POST data
+            data = {"itemcount": len(workshop_ids)}
+            for i, wid in enumerate(workshop_ids):
+                data[f"publishedfileids[{i}]"] = wid
+            
+            encoded_data = urllib.parse.urlencode(data).encode('utf-8')
+            
+            request = urllib.request.Request(url, data=encoded_data, method='POST')
+            request.add_header('Content-Type', 'application/x-www-form-urlencoded')
+            
+            with urllib.request.urlopen(request, timeout=15) as response:
+                result = json.loads(response.read().decode('utf-8'))
+            
+            if 'response' in result and 'publishedfiledetails' in result['response']:
+                for item in result['response']['publishedfiledetails']:
+                    wid = item.get('publishedfileid', '')
+                    title = item.get('title', '')
+                    if wid and title:
+                        names[wid] = title
+            
+            self._log_info(f"Fetched {len(names)} mod names from Steam")
+            
+        except Exception as e:
+            self._log_info(f"Could not fetch mod names: {e}")
+        
+        return names
     
     def _on_log(self, line: str):
         """Handle log output."""
@@ -547,11 +597,15 @@ class DownloadLogWidget(QWidget):
     
     def _on_item_started(self, workshop_id: str):
         """Handle item download started."""
-        self._update_queue_item(workshop_id, "⬇️", "Queued...")
+        item = self._items.get(workshop_id)
+        name = item.name if item else f"Mod {workshop_id}"
+        self._update_queue_item(workshop_id, "⬇️", f"{name} - Queued...")
     
     def _on_item_progress(self, workshop_id: str, progress: int):
         """Handle item progress."""
-        self._update_queue_item(workshop_id, "⬇️", f"Downloading... {progress}%")
+        item = self._items.get(workshop_id)
+        name = item.name if item else f"Mod {workshop_id}"
+        self._update_queue_item(workshop_id, "⬇️", f"{name} - {progress}%")
     
     def _on_item_complete(self, workshop_id: str, path: str, mod_name: str):
         """Handle item complete with mod name."""

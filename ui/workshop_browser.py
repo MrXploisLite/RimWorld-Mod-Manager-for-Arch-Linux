@@ -11,7 +11,8 @@ from dataclasses import dataclass, field
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QLineEdit, QListWidget, QListWidgetItem, QProgressBar,
-    QSplitter, QFrame, QGroupBox, QCheckBox, QTextEdit
+    QSplitter, QFrame, QGroupBox, QCheckBox, QTextEdit,
+    QApplication
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QUrl, QThread
 from PyQt6.QtGui import QColor
@@ -347,9 +348,13 @@ class WorkshopBrowser(QWidget):
             self.status_label.setText(f"Mod {workshop_id} already downloaded (skipped)")
             return False
         
+        # Fetch mod name from Steam API if not provided
+        if not name or name == f"Workshop Mod {workshop_id}":
+            name = self._fetch_mod_name(workshop_id) or f"Workshop Mod {workshop_id}"
+        
         item = WorkshopItem(
             workshop_id=workshop_id,
-            name=name or f"Workshop Mod {workshop_id}"
+            name=name
         )
         
         self.queue.append(item)
@@ -359,28 +364,125 @@ class WorkshopBrowser(QWidget):
         self.queue_list.addItem(list_item)
         
         self._update_queue_count()
-        self.status_label.setText(f"Added {workshop_id} to queue")
+        self.status_label.setText(f"Added: {name}")
         self.mod_added.emit(workshop_id, name)
         
         return True
+    
+    def _fetch_mod_name(self, workshop_id: str) -> Optional[str]:
+        """Fetch mod name from Steam Workshop API."""
+        import urllib.request
+        import urllib.parse
+        import json
+        
+        try:
+            url = "https://api.steampowered.com/ISteamRemoteStorage/GetPublishedFileDetails/v1/"
+            data = {
+                "itemcount": 1,
+                "publishedfileids[0]": workshop_id
+            }
+            encoded_data = urllib.parse.urlencode(data).encode('utf-8')
+            
+            request = urllib.request.Request(url, data=encoded_data, method='POST')
+            request.add_header('Content-Type', 'application/x-www-form-urlencoded')
+            
+            with urllib.request.urlopen(request, timeout=10) as response:
+                result = json.loads(response.read().decode('utf-8'))
+            
+            if 'response' in result and 'publishedfiledetails' in result['response']:
+                details = result['response']['publishedfiledetails']
+                if details and details[0].get('title'):
+                    return details[0]['title']
+        except Exception:
+            pass
+        
+        return None
     
     def _add_batch(self):
         """Add multiple mods from batch input."""
         text = self.batch_input.toPlainText()
         lines = text.strip().split('\n')
         
-        added = 0
+        # Extract all workshop IDs first
+        workshop_ids = []
         for line in lines:
             line = line.strip()
             if not line or line.startswith('#'):
                 continue
-            
             workshop_id = self._extract_workshop_id(line)
-            if workshop_id and self._add_to_queue(workshop_id):
+            if workshop_id and workshop_id not in self.queue_ids:
+                if not (self.dup_check.isChecked() and workshop_id in self.downloaded_ids):
+                    workshop_ids.append(workshop_id)
+        
+        if not workshop_ids:
+            self.status_label.setText("No new mods to add")
+            return
+        
+        self.status_label.setText(f"Fetching names for {len(workshop_ids)} mods...")
+        QApplication.processEvents()
+        
+        # Batch fetch mod names
+        mod_names = self._fetch_mod_names_batch(workshop_ids)
+        
+        added = 0
+        for wid in workshop_ids:
+            name = mod_names.get(wid, f"Workshop Mod {wid}")
+            if self._add_to_queue_direct(wid, name):
                 added += 1
         
         self.batch_input.clear()
         self.status_label.setText(f"Added {added} mod(s) to queue")
+    
+    def _add_to_queue_direct(self, workshop_id: str, name: str) -> bool:
+        """Add to queue without fetching name (used by batch add)."""
+        if workshop_id in self.queue_ids:
+            return False
+        if self.dup_check.isChecked() and workshop_id in self.downloaded_ids:
+            return False
+        
+        item = WorkshopItem(workshop_id=workshop_id, name=name)
+        self.queue.append(item)
+        self.queue_ids.add(workshop_id)
+        
+        list_item = DownloadQueueItem(item)
+        self.queue_list.addItem(list_item)
+        
+        self._update_queue_count()
+        self.mod_added.emit(workshop_id, name)
+        return True
+    
+    def _fetch_mod_names_batch(self, workshop_ids: list[str]) -> dict[str, str]:
+        """Fetch mod names for multiple IDs in one API call."""
+        import urllib.request
+        import urllib.parse
+        import json
+        
+        names = {}
+        
+        try:
+            url = "https://api.steampowered.com/ISteamRemoteStorage/GetPublishedFileDetails/v1/"
+            data = {"itemcount": len(workshop_ids)}
+            for i, wid in enumerate(workshop_ids):
+                data[f"publishedfileids[{i}]"] = wid
+            
+            encoded_data = urllib.parse.urlencode(data).encode('utf-8')
+            
+            request = urllib.request.Request(url, data=encoded_data, method='POST')
+            request.add_header('Content-Type', 'application/x-www-form-urlencoded')
+            
+            with urllib.request.urlopen(request, timeout=15) as response:
+                result = json.loads(response.read().decode('utf-8'))
+            
+            if 'response' in result and 'publishedfiledetails' in result['response']:
+                for item in result['response']['publishedfiledetails']:
+                    wid = item.get('publishedfileid', '')
+                    title = item.get('title', '')
+                    if wid and title:
+                        names[wid] = title
+        except Exception:
+            pass
+        
+        return names
     
     def _parse_collection(self):
         """Parse a Steam collection page for mod IDs."""

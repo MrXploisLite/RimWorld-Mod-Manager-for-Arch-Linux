@@ -1063,13 +1063,22 @@ class MainWindow(QMainWindow):
         # Status bar
         self.status_bar = QStatusBar()
         self.setStatusBar(self.status_bar)
-        self.status_bar.showMessage("Ready")
+        
+        # Mod count labels in status bar
+        self.status_total_label = QLabel("Total: 0")
+        self.status_active_label = QLabel("Active: 0")
+        self.status_inactive_label = QLabel("Inactive: 0")
+        self.status_bar.addPermanentWidget(self.status_total_label)
+        self.status_bar.addPermanentWidget(self.status_active_label)
+        self.status_bar.addPermanentWidget(self.status_inactive_label)
         
         # Progress bar (hidden by default)
         self.progress_bar = QProgressBar()
         self.progress_bar.setMaximumWidth(200)
         self.progress_bar.setVisible(False)
         self.status_bar.addPermanentWidget(self.progress_bar)
+        
+        self.status_bar.showMessage("Ready")
     
     def _setup_menus(self):
         """Set up the menu bar."""
@@ -1090,6 +1099,12 @@ class MainWindow(QMainWindow):
         
         file_menu.addSeparator()
         
+        # Export modlist as text
+        export_text_action = QAction("Export Modlist as Text...", self)
+        export_text_action.setShortcut("Ctrl+Shift+E")
+        export_text_action.triggered.connect(self._export_modlist_text)
+        file_menu.addAction(export_text_action)
+        
         # Save/Export current config
         export_config_action = QAction("Export Config...", self)
         export_config_action.triggered.connect(self._export_config)
@@ -1109,6 +1124,13 @@ class MainWindow(QMainWindow):
         # Edit menu
         edit_menu = menubar.addMenu("Edit")
         
+        search_action = QAction("Search Mods", self)
+        search_action.setShortcut("Ctrl+F")
+        search_action.triggered.connect(self._focus_search)
+        edit_menu.addAction(search_action)
+        
+        edit_menu.addSeparator()
+        
         settings_action = QAction("Settings...", self)
         settings_action.setShortcut("Ctrl+,")
         settings_action.triggered.connect(self._show_settings)
@@ -1125,6 +1147,10 @@ class MainWindow(QMainWindow):
         paths_action.triggered.connect(self._show_paths_dialog)
         tools_menu.addAction(paths_action)
         
+        install_info_action = QAction("Installation Info...", self)
+        install_info_action.triggered.connect(self._show_installation_info)
+        tools_menu.addAction(install_info_action)
+        
         tools_menu.addSeparator()
         
         rescan_action = QAction("Rescan Mods", self)
@@ -1132,8 +1158,27 @@ class MainWindow(QMainWindow):
         rescan_action.triggered.connect(self._scan_mods)
         tools_menu.addAction(rescan_action)
         
+        tools_menu.addSeparator()
+        
+        auto_sort_action = QAction("Auto-Sort by Dependencies", self)
+        auto_sort_action.setShortcut("Ctrl+Shift+S")
+        auto_sort_action.triggered.connect(self._auto_sort_mods)
+        tools_menu.addAction(auto_sort_action)
+        
+        apply_action = QAction("Apply Load Order", self)
+        apply_action.setShortcut("Ctrl+Return")
+        apply_action.triggered.connect(self._apply_mods)
+        tools_menu.addAction(apply_action)
+        
         # Help menu
         help_menu = menubar.addMenu("Help")
+        
+        shortcuts_action = QAction("Keyboard Shortcuts", self)
+        shortcuts_action.setShortcut("F1")
+        shortcuts_action.triggered.connect(self._show_shortcuts)
+        help_menu.addAction(shortcuts_action)
+        
+        help_menu.addSeparator()
         
         about_action = QAction("About", self)
         about_action.triggered.connect(self._show_about)
@@ -1244,6 +1289,35 @@ class MainWindow(QMainWindow):
             install = self.game_detector.add_custom_path(path)
             if install:
                 self.config.add_custom_game_path(path)
+                
+                # For Windows builds without detected config, ask for Proton prefix
+                if install.is_windows_build and not install.config_path:
+                    reply = QMessageBox.question(
+                        self, "Proton/Wine Prefix",
+                        "This appears to be a Windows build.\n\n"
+                        "Would you like to specify a Proton/Wine prefix folder?\n"
+                        "This is needed to find/save the game's config (ModsConfig.xml).\n\n"
+                        "The prefix folder typically contains a 'drive_c' subfolder.",
+                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+                    )
+                    if reply == QMessageBox.StandardButton.Yes:
+                        prefix_path = QFileDialog.getExistingDirectory(
+                            self, "Select Proton/Wine Prefix Folder",
+                            str(Path.home() / ".local/share/Steam/steamapps/compatdata")
+                        )
+                        if prefix_path:
+                            prefix = Path(prefix_path)
+                            # If user selected a compatdata folder, look for pfx subfolder
+                            if (prefix / "pfx").exists():
+                                prefix = prefix / "pfx"
+                            install.proton_prefix = prefix
+                            # Re-detect config paths with the new prefix
+                            self.game_detector._detect_save_config_paths(install)
+                            if install.config_path:
+                                print(f"[DEBUG] Config path found: {install.config_path}")
+                            else:
+                                print(f"[DEBUG] Config path still not found after setting prefix")
+                
                 self._detect_installations()
                 # Select the new installation
                 for i in range(self.install_combo.count()):
@@ -1251,6 +1325,27 @@ class MainWindow(QMainWindow):
                     if item_install and str(item_install.path) == path:
                         self.install_combo.setCurrentIndex(i)
                         break
+                
+                # Show info about detected paths
+                info_msg = f"Installation added: {path}\n\n"
+                if install.config_path:
+                    info_msg += f"✅ Config path: {install.config_path}\n"
+                else:
+                    info_msg += "⚠️ Config path not detected\n"
+                if install.save_path:
+                    info_msg += f"✅ Save path: {install.save_path}\n"
+                else:
+                    info_msg += "⚠️ Save path not detected\n"
+                if install.proton_prefix:
+                    info_msg += f"✅ Proton prefix: {install.proton_prefix}\n"
+                
+                if not install.config_path:
+                    info_msg += (
+                        "\n⚠️ Without a config path, ModsConfig.xml cannot be updated.\n"
+                        "Run the game once to create the config folder, then re-add this installation."
+                    )
+                
+                QMessageBox.information(self, "Installation Added", info_msg)
             else:
                 QMessageBox.warning(
                     self, "Invalid Installation",
@@ -1394,8 +1489,17 @@ class MainWindow(QMainWindow):
     
     def _update_counts(self):
         """Update mod count labels."""
-        self.available_count.setText(f"({self.available_list.count()})")
-        self.active_count.setText(f"({self.active_list.count()})")
+        available = self.available_list.count()
+        active = self.active_list.count()
+        total = len(self.all_mods)
+        
+        self.available_count.setText(f"({available})")
+        self.active_count.setText(f"({active})")
+        
+        # Update status bar counts
+        self.status_total_label.setText(f"Total: {total}")
+        self.status_active_label.setText(f"Active: {active}")
+        self.status_inactive_label.setText(f"Inactive: {available}")
     
     def _filter_available_mods(self, text: str):
         """Filter available mods by search text."""
@@ -1413,12 +1517,19 @@ class MainWindow(QMainWindow):
                 )
                 item.setHidden(not visible)
     
+    def _focus_search(self):
+        """Focus the search input box."""
+        self.main_tabs.setCurrentIndex(0)  # Switch to Mod Manager tab
+        self.search_input.setFocus()
+        self.search_input.selectAll()
+    
     def _on_available_selection(self):
         """Handle selection in available list."""
         selected = self.available_list.get_selected_mods()
         if selected:
             self.details_panel.show_mod(selected[0])
-            self.tools_widget.show_mod_info(selected[0])
+            # Don't call show_mod_info here - it causes freeze due to HTTP request
+            # User can view Workshop info in the Tools tab manually
             self.active_list.clearSelection()
     
     def _on_active_selection(self):
@@ -1426,7 +1537,7 @@ class MainWindow(QMainWindow):
         selected = self.active_list.get_selected_mods()
         if selected:
             self.details_panel.show_mod(selected[0])
-            self.tools_widget.show_mod_info(selected[0])
+            # Don't call show_mod_info here - it causes freeze due to HTTP request
             self.available_list.clearSelection()
     
     def _activate_mod(self, mod: ModInfo):
@@ -1668,7 +1779,7 @@ class MainWindow(QMainWindow):
         # Get paths of active mods (exclude Core/DLC - they're already in Data folder)
         mod_paths = [mod.path for mod in active_mods if mod.path and mod.source != ModSource.GAME]
         
-        # Apply
+        # Apply symlinks
         self.status_bar.showMessage("Applying mod configuration...")
         
         results = self.installer.install_mods(mod_paths, clear_existing=True)
@@ -1677,21 +1788,62 @@ class MainWindow(QMainWindow):
         failed = len(results) - success
         
         # Save active mods to config (by package_id in load order)
+        config_written = False
+        config_warning = ""
+        
         if self.current_installation:
             self.config.save_active_mods(str(self.current_installation.path), active_ids)
+            
+            # Write to game's ModsConfig.xml so game loads the mods
+            if self.current_installation.config_path:
+                from mod_parser import ModsConfigParser
+                config_parser = ModsConfigParser()
+                config_written = config_parser.write_mods_config(
+                    self.current_installation.config_path, 
+                    active_ids
+                )
+                if not config_written:
+                    config_warning = (
+                        f"Failed to write ModsConfig.xml to:\n"
+                        f"{self.current_installation.config_path}\n\n"
+                        "You may need to manually export via Profiles > Game Sync tab."
+                    )
+            else:
+                config_warning = (
+                    "Could not detect game's config folder.\n"
+                    "Symlinks were created but ModsConfig.xml was NOT updated.\n\n"
+                    "The game won't know which mods to load.\n"
+                    "Please use Profiles > Game Sync tab to export manually,\n"
+                    "or run the game once to create the config folder."
+                )
         
+        # Show result
         if failed > 0:
             self.status_bar.showMessage(f"Applied {success} mods, {failed} failed")
-            QMessageBox.warning(
-                self, "Partial Success",
-                f"Successfully linked {success} mods.\n{failed} mods failed to link."
-            )
+            msg = f"Successfully linked {success} mods.\n{failed} mods failed to link."
+            if config_warning:
+                msg += f"\n\n⚠️ {config_warning}"
+            QMessageBox.warning(self, "Partial Success", msg)
         else:
-            self.status_bar.showMessage(f"Applied {success} mods successfully")
-            QMessageBox.information(
-                self, "Success",
-                f"Successfully applied {success} mod(s) to the game."
-            )
+            if config_written:
+                self.status_bar.showMessage(f"Applied {success} mods successfully")
+                QMessageBox.information(
+                    self, "Success",
+                    f"Successfully applied {success} mod(s) to the game.\n"
+                    f"ModsConfig.xml has been updated."
+                )
+            elif config_warning:
+                self.status_bar.showMessage(f"Applied {success} mods (config warning)")
+                QMessageBox.warning(
+                    self, "Symlinks Created",
+                    f"Successfully linked {success} mod(s).\n\n⚠️ {config_warning}"
+                )
+            else:
+                self.status_bar.showMessage(f"Applied {success} mods successfully")
+                QMessageBox.information(
+                    self, "Success",
+                    f"Successfully applied {success} mod(s) to the game."
+                )
     
     def _save_modlist(self):
         """Save current mod list to file."""
@@ -1771,6 +1923,98 @@ class MainWindow(QMainWindow):
         dialog = PathsDialog(self.config, self)
         if dialog.exec():
             self._scan_mods()
+    
+    def _show_installation_info(self):
+        """Show information about the current installation and allow setting Proton prefix."""
+        if not self.current_installation:
+            QMessageBox.warning(self, "No Installation", "No installation selected.")
+            return
+        
+        install = self.current_installation
+        
+        # Build info text
+        info = f"<b>Installation Path:</b><br><code>{install.path}</code><br><br>"
+        info += f"<b>Type:</b> {install.install_type.value}<br>"
+        info += f"<b>Windows Build:</b> {'Yes' if install.is_windows_build else 'No'}<br><br>"
+        
+        if install.config_path:
+            info += f"<b>Config Path:</b> ✅<br><code>{install.config_path}</code><br><br>"
+        else:
+            info += "<b>Config Path:</b> ⚠️ Not detected<br><br>"
+        
+        if install.save_path:
+            info += f"<b>Save Path:</b> ✅<br><code>{install.save_path}</code><br><br>"
+        else:
+            info += "<b>Save Path:</b> ⚠️ Not detected<br><br>"
+        
+        if install.proton_prefix:
+            info += f"<b>Proton/Wine Prefix:</b> ✅<br><code>{install.proton_prefix}</code><br><br>"
+        elif install.is_windows_build:
+            info += "<b>Proton/Wine Prefix:</b> ⚠️ Not set<br><br>"
+        
+        # Create dialog
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Installation Info")
+        dialog.setMinimumSize(500, 350)
+        
+        layout = QVBoxLayout(dialog)
+        
+        info_label = QLabel(info)
+        info_label.setTextFormat(Qt.TextFormat.RichText)
+        info_label.setWordWrap(True)
+        info_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        layout.addWidget(info_label)
+        
+        # Add button to set Proton prefix for Windows builds
+        if install.is_windows_build:
+            btn_layout = QHBoxLayout()
+            
+            btn_set_prefix = QPushButton("Set Proton/Wine Prefix...")
+            def set_prefix():
+                start_path = str(Path.home() / ".local/share/Steam/steamapps/compatdata")
+                if install.proton_prefix:
+                    start_path = str(install.proton_prefix.parent)
+                
+                prefix_path = QFileDialog.getExistingDirectory(
+                    dialog, "Select Proton/Wine Prefix Folder", start_path
+                )
+                if prefix_path:
+                    prefix = Path(prefix_path)
+                    # If user selected a compatdata folder, look for pfx subfolder
+                    if (prefix / "pfx").exists():
+                        prefix = prefix / "pfx"
+                    install.proton_prefix = prefix
+                    # Re-detect config paths
+                    self.game_detector._detect_save_config_paths(install)
+                    # Update profiles widget
+                    if install.config_path:
+                        self.profiles_widget.set_config_path(install.config_path)
+                    dialog.accept()
+                    # Show updated info
+                    self._show_installation_info()
+            
+            btn_set_prefix.clicked.connect(set_prefix)
+            btn_layout.addWidget(btn_set_prefix)
+            btn_layout.addStretch()
+            layout.addLayout(btn_layout)
+        
+        # Warning if no config path
+        if not install.config_path:
+            warning = QLabel(
+                "<br><b style='color: orange;'>⚠️ Warning:</b> Without a config path, "
+                "ModsConfig.xml cannot be updated and the game won't load your mods.<br><br>"
+                "For Windows builds, set the Proton/Wine prefix above.<br>"
+                "Or run the game once to create the config folder, then restart this app."
+            )
+            warning.setWordWrap(True)
+            layout.addWidget(warning)
+        
+        # Close button
+        btn_close = QPushButton("Close")
+        btn_close.clicked.connect(dialog.accept)
+        layout.addWidget(btn_close)
+        
+        dialog.exec()
     
     def _setup_workshop_browser(self):
         """Set up the Workshop browser tab."""
@@ -1965,6 +2209,25 @@ class MainWindow(QMainWindow):
             "<p>Version 0.0.5</p>"
         )
     
+    def _show_shortcuts(self):
+        """Show keyboard shortcuts dialog."""
+        shortcuts_text = """
+<h3>Keyboard Shortcuts</h3>
+<table>
+<tr><td><b>Ctrl+S</b></td><td>Save modlist</td></tr>
+<tr><td><b>Ctrl+O</b></td><td>Load modlist</td></tr>
+<tr><td><b>Ctrl+Shift+E</b></td><td>Export modlist as text</td></tr>
+<tr><td><b>Ctrl+,</b></td><td>Open settings</td></tr>
+<tr><td><b>Ctrl+Q</b></td><td>Quit application</td></tr>
+<tr><td><b>Ctrl+F</b></td><td>Focus search box</td></tr>
+<tr><td><b>F5</b></td><td>Rescan mods</td></tr>
+<tr><td><b>Ctrl+Shift+S</b></td><td>Auto-sort by dependencies</td></tr>
+<tr><td><b>Ctrl+Return</b></td><td>Apply load order</td></tr>
+<tr><td><b>F1</b></td><td>Show this help</td></tr>
+</table>
+"""
+        QMessageBox.information(self, "Keyboard Shortcuts", shortcuts_text)
+    
     def _show_settings(self):
         """Show settings dialog."""
         dialog = SettingsDialog(self.config, self)
@@ -2005,6 +2268,78 @@ class MainWindow(QMainWindow):
                 QMessageBox.information(self, "Export Successful", f"Configuration exported to:\n{filepath}")
             except (OSError, IOError, TypeError, ValueError) as e:
                 QMessageBox.warning(self, "Export Failed", f"Failed to export config:\n{e}")
+    
+    def _export_modlist_text(self):
+        """Export active modlist as shareable text."""
+        active_mods = self.active_list.get_mods()
+        
+        if not active_mods:
+            QMessageBox.information(self, "No Mods", "No active mods to export.")
+            return
+        
+        # Build text content
+        lines = [
+            "# RimWorld Modlist",
+            f"# Generated by RimModManager v0.0.5",
+            f"# Total mods: {len(active_mods)}",
+            "",
+            "## Load Order:",
+            ""
+        ]
+        
+        for i, mod in enumerate(active_mods, 1):
+            workshop_id = mod.steam_workshop_id or "local"
+            lines.append(f"{i:3}. {mod.display_name()} [{mod.package_id}]")
+            if mod.steam_workshop_id:
+                lines.append(f"     Workshop: https://steamcommunity.com/sharedfiles/filedetails/?id={mod.steam_workshop_id}")
+        
+        lines.extend([
+            "",
+            "## Workshop IDs (for batch download):",
+            ""
+        ])
+        
+        workshop_ids = [mod.steam_workshop_id for mod in active_mods if mod.steam_workshop_id]
+        if workshop_ids:
+            lines.extend(workshop_ids)
+        else:
+            lines.append("(No Workshop mods)")
+        
+        text_content = "\n".join(lines)
+        
+        # Ask user what to do
+        dialog = QMessageBox(self)
+        dialog.setWindowTitle("Export Modlist")
+        dialog.setText(f"Export {len(active_mods)} mods as text?")
+        dialog.setInformativeText("Choose how to export:")
+        
+        save_btn = dialog.addButton("Save to File", QMessageBox.ButtonRole.AcceptRole)
+        copy_btn = dialog.addButton("Copy to Clipboard", QMessageBox.ButtonRole.ActionRole)
+        dialog.addButton(QMessageBox.StandardButton.Cancel)
+        
+        dialog.exec()
+        
+        clicked = dialog.clickedButton()
+        
+        if clicked == save_btn:
+            filepath, _ = QFileDialog.getSaveFileName(
+                self, "Save Modlist",
+                str(Path.home() / "rimworld-modlist.txt"),
+                "Text Files (*.txt);;Markdown Files (*.md)"
+            )
+            if filepath:
+                try:
+                    with open(filepath, 'w', encoding='utf-8') as f:
+                        f.write(text_content)
+                    self.status_bar.showMessage(f"Modlist exported to {filepath}")
+                    QMessageBox.information(self, "Success", f"Modlist saved to:\n{filepath}")
+                except (OSError, IOError) as e:
+                    QMessageBox.warning(self, "Error", f"Failed to save file:\n{e}")
+        
+        elif clicked == copy_btn:
+            clipboard = QApplication.clipboard()
+            clipboard.setText(text_content)
+            self.status_bar.showMessage("Modlist copied to clipboard!")
     
     def _import_config(self):
         """Import configuration from a file."""

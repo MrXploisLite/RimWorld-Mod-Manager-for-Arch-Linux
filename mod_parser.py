@@ -692,14 +692,14 @@ class ModsConfigParser:
         
         return None
     
-    def parse_mods_config(self, config_path: Path) -> tuple[list[str], str]:
+    def parse_mods_config(self, config_path: Path) -> tuple[list[str], str, list[str]]:
         """
-        Parse ModsConfig.xml and return (active_mod_ids, game_version).
-        Returns empty list if file not found or invalid.
+        Parse ModsConfig.xml and return (active_mod_ids, game_version, known_expansions).
+        Returns empty values if file not found or invalid.
         """
         mods_config = self.find_mods_config(config_path)
         if not mods_config:
-            return [], ""
+            return [], "", []
         
         try:
             tree = ET.parse(mods_config)
@@ -717,56 +717,152 @@ class ModsConfigParser:
                     if li.text:
                         active_mods.append(li.text.strip())
             
-            return active_mods, game_version
+            # Get known expansions
+            known_expansions = []
+            known_expansions_elem = root.find("knownExpansions")
+            if known_expansions_elem is not None:
+                for li in known_expansions_elem.findall("li"):
+                    if li.text:
+                        known_expansions.append(li.text.strip())
+            
+            return active_mods, game_version, known_expansions
             
         except (ET.ParseError, IOError) as e:
             print(f"Failed to parse ModsConfig.xml: {e}")
-            return [], ""
+            return [], "", []
     
     def write_mods_config(self, config_path: Path, active_mods: list[str], 
-                          game_version: str = "") -> bool:
+                          game_version: str = "", preserve_existing: bool = True) -> bool:
         """
         Write ModsConfig.xml with the given mod list.
-        Creates backup of existing file first.
-        """
-        mods_config = config_path / "ModsConfig.xml"
         
-        # Create backup
+        Args:
+            config_path: Path to the Config folder
+            active_mods: List of package IDs to activate (in load order)
+            game_version: Game version string (optional, will preserve existing if not provided)
+            preserve_existing: If True, preserve version and knownExpansions from existing file
+        
+        Returns:
+            True if successful, False otherwise
+        """
+        # Ensure config directory exists
+        try:
+            config_path.mkdir(parents=True, exist_ok=True)
+        except (IOError, PermissionError) as e:
+            print(f"Failed to create config directory {config_path}: {e}")
+            return False
+        
+        mods_config = config_path / "ModsConfig.xml"
+        backup_path = config_path / "ModsConfig.xml.backup"
+        
+        # Try to preserve existing data - check main file first, then backup
+        existing_version = ""
+        existing_expansions = []
+        
+        if preserve_existing:
+            # Try main file first
+            if mods_config.exists():
+                try:
+                    _, existing_version, existing_expansions = self.parse_mods_config(config_path)
+                except Exception:
+                    pass
+            
+            # If no version found, try backup file
+            if not existing_version and backup_path.exists():
+                try:
+                    tree = ET.parse(backup_path)
+                    root = tree.getroot()
+                    version_elem = root.find("version")
+                    if version_elem is not None and version_elem.text:
+                        existing_version = version_elem.text.strip()
+                        print(f"[ModsConfig] Recovered version from backup: {existing_version}")
+                except Exception:
+                    pass
+        
+        # Use provided version or existing or empty
+        final_version = game_version or existing_version
+        
+        # Default expansions with correct PascalCase (RimWorld expects this exact casing)
+        default_expansions = [
+            "Ludeon.RimWorld",
+            "Ludeon.RimWorld.Royalty", 
+            "Ludeon.RimWorld.Ideology",
+            "Ludeon.RimWorld.Biotech",
+            "Ludeon.RimWorld.Anomaly",
+            "Ludeon.RimWorld.Odyssey"
+        ]
+        
+        # Deduplicate expansions (case-insensitive) and normalize to PascalCase
+        # Create a mapping of lowercase -> PascalCase for known expansions
+        expansion_map = {exp.lower(): exp for exp in default_expansions}
+        
+        # Deduplicate existing expansions
+        seen_expansions = set()
+        final_expansions = []
+        for exp in (existing_expansions or default_expansions):
+            exp_lower = exp.lower()
+            if exp_lower not in seen_expansions:
+                seen_expansions.add(exp_lower)
+                # Use PascalCase version if known, otherwise keep original
+                final_expansions.append(expansion_map.get(exp_lower, exp))
+        
+        # Ensure all default expansions are included
+        for exp in default_expansions:
+            if exp.lower() not in seen_expansions:
+                final_expansions.append(exp)
+                seen_expansions.add(exp.lower())
+        
+        # Deduplicate active_mods (case-insensitive, preserve order and original casing)
+        # But normalize Core/DLC to PascalCase
+        seen_mods = set()
+        deduped_mods = []
+        for mod_id in active_mods:
+            mod_lower = mod_id.lower()
+            if mod_lower not in seen_mods:
+                seen_mods.add(mod_lower)
+                # Normalize Core/DLC to PascalCase
+                normalized = expansion_map.get(mod_lower, mod_id)
+                deduped_mods.append(normalized)
+        
+        # Create backup of existing file
         if mods_config.exists():
-            backup_path = config_path / "ModsConfig.xml.backup"
             try:
                 import shutil
                 shutil.copy2(mods_config, backup_path)
-            except IOError:
-                pass
+                print(f"[ModsConfig] Backup created: {backup_path}")
+            except IOError as e:
+                print(f"[ModsConfig] Warning: Could not create backup: {e}")
         
-        # Build XML
+        # Build XML structure
         root = ET.Element("ModsConfigData")
         
-        if game_version:
+        # Add version if available
+        if final_version:
             version_elem = ET.SubElement(root, "version")
-            version_elem.text = game_version
+            version_elem.text = final_version
         
+        # Add active mods (deduplicated)
         active_mods_elem = ET.SubElement(root, "activeMods")
-        for mod_id in active_mods:
+        for mod_id in deduped_mods:
             li = ET.SubElement(active_mods_elem, "li")
             li.text = mod_id
         
-        # Known expansions (empty by default)
-        known_expansions = ET.SubElement(root, "knownExpansions")
-        for expansion in ["ludeon.rimworld", "ludeon.rimworld.royalty", 
-                          "ludeon.rimworld.ideology", "ludeon.rimworld.biotech",
-                          "ludeon.rimworld.anomaly"]:
-            li = ET.SubElement(known_expansions, "li")
+        # Add known expansions (deduplicated)
+        known_expansions_elem = ET.SubElement(root, "knownExpansions")
+        for expansion in final_expansions:
+            li = ET.SubElement(known_expansions_elem, "li")
             li.text = expansion
         
+        # Write to file
         try:
             tree = ET.ElementTree(root)
             ET.indent(tree, space="  ")
             tree.write(mods_config, encoding="utf-8", xml_declaration=True)
+            print(f"[ModsConfig] Written to: {mods_config}")
+            print(f"[ModsConfig] Active mods count: {len(deduped_mods)}")
             return True
-        except IOError as e:
-            print(f"Failed to write ModsConfig.xml: {e}")
+        except (IOError, PermissionError) as e:
+            print(f"[ModsConfig] Failed to write: {e}")
             return False
 
 
@@ -1132,6 +1228,13 @@ class EnhancedModInfoFetcher:
                     for item in response_data['response']['publishedfiledetails']:
                         wid = item.get('publishedfileid', '')
                         if wid:
+                            # Safely convert numeric fields (API sometimes returns strings)
+                            def safe_int(val, default=0):
+                                try:
+                                    return int(val) if val else default
+                                except (ValueError, TypeError):
+                                    return default
+                            
                             info = EnhancedModInfo(
                                 workshop_id=wid,
                                 title=item.get('title', ''),
@@ -1139,10 +1242,10 @@ class EnhancedModInfoFetcher:
                                 author_id=item.get('creator', ''),
                                 time_created=datetime.fromtimestamp(item.get('time_created', 0)).isoformat() if item.get('time_created') else '',
                                 time_updated=datetime.fromtimestamp(item.get('time_updated', 0)).isoformat() if item.get('time_updated') else '',
-                                file_size=item.get('file_size', 0),
-                                subscriptions=item.get('subscriptions', 0),
-                                favorited=item.get('favorited', 0),
-                                views=item.get('views', 0),
+                                file_size=safe_int(item.get('file_size', 0)),
+                                subscriptions=safe_int(item.get('subscriptions', 0)),
+                                favorited=safe_int(item.get('favorited', 0)),
+                                views=safe_int(item.get('views', 0)),
                                 tags=[t.get('tag', '') for t in item.get('tags', [])],
                                 preview_url=item.get('preview_url', ''),
                             )

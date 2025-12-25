@@ -580,6 +580,42 @@ class GameDetector:
                                     prefixes_to_check.append(pfx)
                     except PermissionError:
                         pass
+            
+            # Also check common Wine/Lutris/Bottles prefix locations
+            wine_prefix_locations = [
+                Path.home() / ".wine",
+                Path.home() / ".wine32",
+                Path.home() / ".wine64",
+                Path.home() / ".local/share/lutris/runners/wine",
+                Path.home() / ".local/share/lutris/prefixes",
+                Path.home() / ".local/share/bottles/bottles",
+                Path.home() / ".var/app/com.usebottles.bottles/data/bottles/bottles",
+                Path.home() / ".local/share/PlayOnLinux/wineprefix",
+                Path.home() / ".PlayOnLinux/wineprefix",
+                Path.home() / "Games",  # Common location for game prefixes
+            ]
+            
+            for prefix_base in wine_prefix_locations:
+                if not prefix_base.exists():
+                    continue
+                try:
+                    # Check if this is a direct prefix (has drive_c)
+                    if (prefix_base / "drive_c").exists():
+                        if prefix_base not in prefixes_to_check:
+                            prefixes_to_check.append(prefix_base)
+                    else:
+                        # Search subdirectories for prefixes
+                        for subdir in prefix_base.iterdir():
+                            if subdir.is_dir():
+                                if (subdir / "drive_c").exists():
+                                    if subdir not in prefixes_to_check:
+                                        prefixes_to_check.append(subdir)
+                                elif (subdir / "pfx" / "drive_c").exists():
+                                    pfx = subdir / "pfx"
+                                    if pfx not in prefixes_to_check:
+                                        prefixes_to_check.append(pfx)
+                except PermissionError:
+                    pass
         
         # Search for config in all prefixes
         for prefix in prefixes_to_check:
