@@ -1,42 +1,52 @@
 # RimWorld Mod Manager for Arch Linux
 
+[![GitHub license](https://img.shields.io/github/license/MrXploisLite/RimWorld-Mod-Manager-for-Arch-Linux)](https://github.com/MrXploisLite/RimWorld-Mod-Manager-for-Arch-Linux/blob/main/LICENSE)
+[![GitHub issues](https://img.shields.io/github/issues/MrXploisLite/RimWorld-Mod-Manager-for-Arch-Linux)](https://github.com/MrXploisLite/RimWorld-Mod-Manager-for-Arch-Linux/issues)
+[![GitHub stars](https://img.shields.io/github/stars/MrXploisLite/RimWorld-Mod-Manager-for-Arch-Linux)](https://github.com/MrXploisLite/RimWorld-Mod-Manager-for-Arch-Linux/stargazers)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![PyQt6](https://img.shields.io/badge/GUI-PyQt6-green.svg)](https://www.riverbankcomputing.com/software/pyqt/)
+[![Arch Linux](https://img.shields.io/badge/Arch%20Linux-1793D1?logo=arch-linux&logoColor=white)](https://archlinux.org/)
+
 A universal, robust mod manager for RimWorld on Arch Linux and derivatives (CachyOS, Manjaro, EndeavourOS, etc.).
 
-## Features
+![Screenshot](https://img.shields.io/badge/Status-Active-success)
 
-- **Universal Game Detection**: Automatically detects RimWorld installations from:
-  - Steam native Linux version
-  - Steam Windows version via Proton (including Proton-GE, Proton-CachyOS)
-  - Flatpak Steam installations
-  - Non-Steam/standalone Windows versions running via Wine/Proton
-  - Custom user-defined paths
+## ✨ Features
 
-- **Mod Management**:
-  - Drag-and-drop load order management
-  - Symlink-based mod activation (non-destructive)
-  - Active/Inactive mod lists
-  - Search and filter mods
-  - Mod conflict detection (duplicate packageId)
-  - Dependency checking
-  - Incompatibility warnings
-  - Load order validation (loadBefore/loadAfter)
+### 🎮 Universal Game Detection
+Automatically detects RimWorld installations from:
+- ✅ Steam native Linux version
+- ✅ Steam Windows version via Proton (including Proton-GE, Proton-CachyOS)
+- ✅ Flatpak Steam installations
+- ✅ Non-Steam/standalone Windows versions running via Wine/Proton
+- ✅ Custom user-defined paths
 
-- **Workshop Integration**:
-  - **Integrated Workshop Browser** with embedded web view
-  - Browse Most Popular, Recent, Trending mods directly in-app
-  - One-click add mods to download queue
-  - Parse entire Collections - subscribe all mods at once
-  - Duplicate detection - skip already downloaded mods
-  - Batch download from text file or pasted URLs
-  - Download queue with progress tracking
-  - SteamCMD-based anonymous downloads
+### 📦 Mod Management
+- 🔄 Drag-and-drop load order management
+- 🔗 Symlink-based mod activation (non-destructive)
+- ➕ Hover buttons for quick activate/deactivate
+- 🔍 Search and filter mods
+- ⚠️ Mod conflict detection (duplicate packageId)
+- 📋 Dependency checking & incompatibility warnings
+- 🔀 Auto-sort by load order (loadBefore/loadAfter)
+- ▶️ Launch game directly from mod manager
 
-- **Save/Config Management**:
-  - Automatically detects save/config locations for each installation type
-  - Quick buttons to open save and config folders
-  - Save and load modlists as JSON
+### 🔧 Workshop Integration
+- 🌐 **Integrated Workshop Browser** with embedded web view
+- 🔥 Browse Most Popular, Recent, Trending mods directly in-app
+- ➕ One-click add mods to download queue
+- 📁 Parse entire Collections - subscribe all mods at once
+- 🚫 Duplicate detection - skip already downloaded mods
+- 📝 Batch download from text file or pasted URLs
+- 📊 Live download progress with SteamCMD output
+- 🔄 Single session batch downloads (efficient!)
 
-## Installation
+### 💾 Save/Config Management
+- 🔍 Automatically detects save/config locations for each installation type
+- 📂 Quick buttons to open save and config folders
+- 💾 Save and load modlists as JSON
+
+## 🚀 Installation
 
 ### Prerequisites
 
@@ -71,8 +81,8 @@ makepkg -si
 
 1. Clone or download this repository:
 ```bash
-git clone https://github.com/your-repo/rimworld-mod-manager.git
-cd rimworld-mod-manager
+git clone https://github.com/MrXploisLite/RimWorld-Mod-Manager-for-Arch-Linux.git
+cd RimWorld-Mod-Manager-for-Arch-Linux
 ```
 
 2. Run the application:
@@ -94,7 +104,7 @@ Type=Application
 Categories=Game;Utility;
 ```
 
-## Usage Guide
+## 📖 Usage Guide
 
 ### First Launch
 
@@ -105,12 +115,14 @@ Categories=Game;Utility;
 ### Managing Mods
 
 **Activating Mods:**
-- Double-click a mod in "Available Mods" to activate it
+- Click the ➕ button that appears when hovering over a mod
+- Or double-click a mod in "Available Mods" to activate it
 - Or drag mods from Available to Active list
 - Or right-click and select "Activate Selected"
 
 **Deactivating Mods:**
-- Double-click a mod in "Active Mods" to deactivate it
+- Click the ➖ button that appears when hovering over a mod
+- Or double-click a mod in "Active Mods" to deactivate it
 - Or drag mods from Active to Available list
 - Or right-click and select "Deactivate Selected"
 
@@ -118,6 +130,10 @@ Categories=Game;Utility;
 - Drag mods up/down in the Active list
 - Use the arrow buttons (⬆⬇) to move selected mods
 - Use ⬆⬆/⬇⬇ buttons to move to top/bottom
+- Click 🔄 **Auto-Sort** to automatically sort by dependencies
+
+**Launching the Game:**
+- Click the 🎮 **Play RimWorld** button to launch the game directly
 
 **Applying Changes:**
 - Click "Apply Load Order" to apply your mod configuration
@@ -173,7 +189,7 @@ steamcommunity.com/workshop/filedetails/?id=818773962
 - Add via "Add Custom" button
 - Saves typically in Wine prefix: `<prefix>/drive_c/users/<user>/AppData/LocalLow/Ludeon Studios/...`
 
-## Troubleshooting
+## 🔧 Troubleshooting
 
 ### No installations detected
 1. Ensure RimWorld is installed
