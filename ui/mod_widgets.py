@@ -119,6 +119,10 @@ class HoverButtonDelegate(QStyledItemDelegate):
     
     def editorEvent(self, event, model, option, index):
         """Handle mouse events on the button."""
+        # Bounds check - ensure index is valid
+        if not index.isValid():
+            return super().editorEvent(event, model, option, index)
+        
         if event.type() == QEvent.Type.MouseButtonRelease:
             btn_size = 24
             btn_margin = 4
