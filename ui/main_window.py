@@ -1800,20 +1800,23 @@ class MainWindow(QMainWindow):
         success = sum(1 for v in results.values() if v)
         failed = len(results) - success
         
-        # Save active mods to config (by package_id in load order)
+        # Save active mods to config (by package_id in load order) - includes DLC for UI state
         config_written = False
         config_warning = ""
         
         if self.current_installation:
             self.config.save_active_mods(str(self.current_installation.path), active_ids)
             
-            # Write to game's ModsConfig.xml so game loads the mods
+            # Write to game's ModsConfig.xml - EXCLUDE Core/DLC (they auto-load from Data folder)
+            # Only write actual mods, not DLC
+            mods_only_ids = [mod.package_id for mod in active_mods if mod.source != ModSource.GAME]
+            
             if self.current_installation.config_path:
                 from mod_parser import ModsConfigParser
                 config_parser = ModsConfigParser()
                 config_written = config_parser.write_mods_config(
                     self.current_installation.config_path, 
-                    active_ids
+                    mods_only_ids
                 )
                 if not config_written:
                     config_warning = (
