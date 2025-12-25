@@ -630,6 +630,7 @@ class GameDetector:
         # Native Linux build - standard Unity path
         if not install.is_windows_build:
             native_paths = [
+                90
                 Path.home() / ".config/unity3d/Ludeon Studios/RimWorld by Ludeon Studios",
                 Path.home() / ".config/unity3d/Ludeon Studios",
             ]

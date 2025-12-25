@@ -298,7 +298,7 @@ class ModParser:
             pub_id_file = mod.path / "About" / "PublishedFileId.txt"
             if pub_id_file.exists():
                 try:
-                    with open(pub_id_file, 'r') as f:
+                    with open(pub_id_file, 'r', encoding='utf-8') as f:
                         workshop_id = f.read().strip()
                         if workshop_id.isdigit():
                             mod.steam_workshop_id = workshop_id
