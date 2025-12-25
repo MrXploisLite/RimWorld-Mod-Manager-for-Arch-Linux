@@ -1807,16 +1807,14 @@ class MainWindow(QMainWindow):
         if self.current_installation:
             self.config.save_active_mods(str(self.current_installation.path), active_ids)
             
-            # Write to game's ModsConfig.xml - EXCLUDE Core/DLC (they auto-load from Data folder)
-            # Only write actual mods, not DLC
-            mods_only_ids = [mod.package_id for mod in active_mods if mod.source != ModSource.GAME]
-            
+            # Write to game's ModsConfig.xml - include ALL mods (Core/DLC + mods)
+            # Game needs Core/DLC in activeMods, otherwise it resets to defaults
             if self.current_installation.config_path:
                 from mod_parser import ModsConfigParser
                 config_parser = ModsConfigParser()
                 config_written = config_parser.write_mods_config(
                     self.current_installation.config_path, 
-                    mods_only_ids
+                    active_ids
                 )
                 if not config_written:
                     config_warning = (
