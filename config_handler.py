@@ -72,6 +72,9 @@ class AppConfig:
     # Auto-update settings
     check_updates_on_startup: bool = False
     
+    # Performance settings
+    disable_webengine: bool = False  # Disable WebEngine for lower memory usage
+    
     # Config path overrides per installation (for standalone/Wine games)
     # Key: installation path, Value: config folder path
     config_path_overrides: dict[str, str] = field(default_factory=dict)

@@ -892,6 +892,24 @@ class SettingsDialog(QDialog):
         
         layout.addWidget(ui_group)
         
+        # Performance Settings
+        perf_group = QGroupBox("Performance")
+        perf_layout = QVBoxLayout(perf_group)
+        
+        self.disable_webengine_check = QCheckBox("Disable embedded browser (saves ~150MB RAM)")
+        self.disable_webengine_check.setToolTip(
+            "Disable the embedded Steam Workshop browser.\n"
+            "You can still download mods using Quick Download (Ctrl+D)\n"
+            "or by pasting URLs in the Workshop tab."
+        )
+        perf_layout.addWidget(self.disable_webengine_check)
+        
+        perf_note = QLabel("<i>Changes take effect after restart</i>")
+        perf_note.setStyleSheet("color: #888; font-size: 10px;")
+        perf_layout.addWidget(perf_note)
+        
+        layout.addWidget(perf_group)
+        
         # Update Settings
         update_group = QGroupBox("Updates")
         update_layout = QVBoxLayout(update_group)
@@ -934,12 +952,14 @@ class SettingsDialog(QDialog):
         self.workshop_path_edit.setText(self.config.config.workshop_download_path)
         self.steamcmd_path_edit.setText(self.config.config.steamcmd_path)
         self.check_updates_startup.setChecked(self.config.config.check_updates_on_startup)
+        self.disable_webengine_check.setChecked(self.config.config.disable_webengine)
     
     def _save_settings(self):
         """Save settings and close dialog."""
         self.config.config.workshop_download_path = self.workshop_path_edit.text()
         self.config.config.steamcmd_path = self.steamcmd_path_edit.text()
         self.config.config.check_updates_on_startup = self.check_updates_startup.isChecked()
+        self.config.config.disable_webengine = self.disable_webengine_check.isChecked()
         self.config.save()
         self.accept()
     
@@ -1178,16 +1198,21 @@ class MainWindow(QMainWindow):
         workshop_layout = QVBoxLayout(self.workshop_tab)
         workshop_layout.setContentsMargins(0, 0, 0, 0)
         
-        # Placeholder - will be populated when downloader is ready
+        # Placeholder - will be populated when tab is first clicked (lazy loading)
         self.workshop_browser = None
+        self._workshop_initialized = False
         self.workshop_placeholder = QLabel(
-            "<h3>Select a RimWorld installation first</h3>"
-            "<p>The Workshop browser will be available after selecting an installation.</p>"
+            "<h3>🔧 Workshop Browser</h3>"
+            "<p>Click this tab to load the Steam Workshop browser.</p>"
+            "<p><i>WebEngine is loaded on-demand to save memory.</i></p>"
         )
         self.workshop_placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
         workshop_layout.addWidget(self.workshop_placeholder)
         
         self.main_tabs.addTab(self.workshop_tab, "🔧 Workshop Browser")
+        
+        # Connect tab change signal for lazy loading
+        self.main_tabs.currentChanged.connect(self._on_tab_changed)
         
         # ===== TAB 3: Download Manager with Live Logs =====
         self.download_tab = QWidget()
@@ -1415,6 +1440,26 @@ class MainWindow(QMainWindow):
         # Details panel actions
         self.details_panel.uninstall_requested.connect(self._uninstall_mod)
         self.details_panel.open_folder_requested.connect(self._open_mod_folder)
+    
+    def _on_tab_changed(self, index: int):
+        """Handle tab change - lazy load Workshop browser."""
+        # Workshop tab is index 1
+        if index == 1 and not self._workshop_initialized:
+            self._lazy_init_workshop_browser()
+    
+    def _lazy_init_workshop_browser(self):
+        """Lazy initialize the Workshop browser (saves ~100-200MB RAM on startup)."""
+        if self._workshop_initialized:
+            return
+        
+        self._workshop_initialized = True
+        self.status_bar.showMessage("Loading Workshop browser...")
+        QApplication.processEvents()
+        
+        # Initialize the workshop browser
+        self._init_workshop_browser()
+        
+        self.status_bar.showMessage("Workshop browser ready")
     
     def _initial_setup(self):
         """Perform initial setup after window is shown."""
@@ -2696,7 +2741,20 @@ class MainWindow(QMainWindow):
         )
     
     def _setup_workshop_browser(self):
-        """Set up the Workshop browser tab."""
+        """Set up the Workshop browser tab - only updates if already initialized (lazy loading)."""
+        if not self.downloader:
+            return
+        
+        # If workshop browser not yet initialized (lazy loading), just return
+        # It will be initialized when user clicks the Workshop tab
+        if not self._workshop_initialized:
+            return
+        
+        # Update downloaded IDs for existing browser
+        self._init_workshop_browser()
+    
+    def _init_workshop_browser(self):
+        """Initialize or reinitialize the Workshop browser."""
         if not self.downloader:
             return
         
@@ -2717,8 +2775,15 @@ class MainWindow(QMainWindow):
         if self.workshop_browser:
             self.workshop_browser.setParent(None)
         
-        # Create new workshop browser
-        self.workshop_browser = WorkshopBrowser(downloaded_ids, self.workshop_tab)
+        # Check if WebEngine is disabled in settings (saves ~150MB RAM)
+        disable_webengine = self.config.config.disable_webengine
+        
+        # Create new workshop browser (pass disable flag)
+        self.workshop_browser = WorkshopBrowser(
+            downloaded_ids, 
+            parent=self.workshop_tab,
+            disable_webengine=disable_webengine
+        )
         self.workshop_browser.download_requested.connect(self._start_workshop_download)
         
         # Add to tab layout
@@ -2896,18 +2961,33 @@ class MainWindow(QMainWindow):
         """Show keyboard shortcuts dialog."""
         shortcuts_text = """
 <h3>Keyboard Shortcuts</h3>
-<table>
+<table style="border-collapse: collapse;">
+<tr><th colspan="2" style="text-align:left; padding-top:10px;">File Operations</th></tr>
 <tr><td><b>Ctrl+S</b></td><td>Save modlist</td></tr>
 <tr><td><b>Ctrl+O</b></td><td>Load modlist</td></tr>
+<tr><td><b>Ctrl+I</b></td><td>Import from RimPy/RimSort</td></tr>
+<tr><td><b>Ctrl+D</b></td><td>Quick Download (paste URLs)</td></tr>
 <tr><td><b>Ctrl+Shift+E</b></td><td>Export modlist as text</td></tr>
-<tr><td><b>Ctrl+,</b></td><td>Open settings</td></tr>
+<tr><td><b>Ctrl+Shift+C</b></td><td>Export as shareable code</td></tr>
+<tr><td><b>Ctrl+Shift+V</b></td><td>Import from code</td></tr>
 <tr><td><b>Ctrl+Q</b></td><td>Quit application</td></tr>
+
+<tr><th colspan="2" style="text-align:left; padding-top:10px;">Navigation</th></tr>
 <tr><td><b>Ctrl+F</b></td><td>Focus search box</td></tr>
+<tr><td><b>Ctrl+,</b></td><td>Open settings</td></tr>
+<tr><td><b>F1</b></td><td>Show this help</td></tr>
+
+<tr><th colspan="2" style="text-align:left; padding-top:10px;">Mod Management</th></tr>
 <tr><td><b>F5</b></td><td>Rescan mods</td></tr>
 <tr><td><b>Ctrl+Shift+S</b></td><td>Auto-sort by dependencies</td></tr>
 <tr><td><b>Ctrl+Return</b></td><td>Apply load order</td></tr>
-<tr><td><b>F1</b></td><td>Show this help</td></tr>
+<tr><td><b>Ctrl+G</b></td><td>Show dependency graph</td></tr>
+<tr><td><b>Double-click</b></td><td>Activate/deactivate mod</td></tr>
 </table>
+
+<p style="margin-top:15px; color:#888;">
+<b>Tip:</b> Hover over mods to see ➕/➖ buttons for quick activation.
+</p>
 """
         QMessageBox.information(self, "Keyboard Shortcuts", shortcuts_text)
     

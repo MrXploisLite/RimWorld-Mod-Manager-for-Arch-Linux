@@ -68,12 +68,13 @@ class WorkshopBrowser(QWidget):
     WORKSHOP_URL = "https://steamcommunity.com/app/294100/workshop/"
     WORKSHOP_BROWSE_URL = "https://steamcommunity.com/workshop/browse/?appid=294100"
     
-    def __init__(self, downloaded_ids: set[str] = None, parent=None):
+    def __init__(self, downloaded_ids: set[str] = None, parent=None, disable_webengine: bool = False):
         super().__init__(parent)
         self.downloaded_ids = downloaded_ids or set()
         self.queue: list[WorkshopItem] = []
         self.queue_ids: set[str] = set()
         self._queue_lock = threading.Lock()  # Thread safety for queue operations
+        self._disable_webengine = disable_webengine  # User preference to disable WebEngine
         
         self._setup_ui()
     
@@ -123,8 +124,10 @@ class WorkshopBrowser(QWidget):
         
         browser_layout.addLayout(nav_bar)
         
-        # Web view or fallback
-        if HAS_WEBENGINE:
+        # Web view or fallback (check both availability AND user preference)
+        use_webengine = HAS_WEBENGINE and not self._disable_webengine
+        
+        if use_webengine:
             from PyQt6.QtWebEngineCore import QWebEngineSettings, QWebEngineProfile
             
             self.web_view = QWebEngineView()
@@ -170,15 +173,28 @@ class WorkshopBrowser(QWidget):
             self.web_view.urlChanged.connect(self._on_url_changed)
             self.url_input.returnPressed.connect(self._navigate_to_url)
         else:
-            # Fallback - no web engine
+            # Fallback - WebEngine not available or disabled by user
             self.web_view = None
-            fallback = QLabel(
-                "<h3>Web Browser Not Available</h3>"
-                "<p>PyQt6-WebEngine is not installed.</p>"
-                "<p>Install with: <code>sudo pacman -S python-pyqt6-webengine</code></p>"
-                "<p>You can still paste Workshop URLs or mod IDs above and add them to the queue.</p>"
-                f"<p><a href='{self.WORKSHOP_URL}'>Open Workshop in Browser</a></p>"
-            )
+            
+            if self._disable_webengine:
+                # User disabled WebEngine for performance
+                fallback = QLabel(
+                    "<h3>🚀 Lightweight Mode</h3>"
+                    "<p>Embedded browser disabled for better performance.</p>"
+                    "<p>Paste Workshop URLs or mod IDs in the input above, then click <b>Add to Queue</b>.</p>"
+                    "<p>Or use <b>Ctrl+D</b> for Quick Download dialog.</p>"
+                    f"<p><a href='{self.WORKSHOP_URL}'>🌐 Open Workshop in Browser</a></p>"
+                    "<p style='color: #888; font-size: 10px;'>Re-enable in Settings → Performance</p>"
+                )
+            else:
+                # WebEngine not installed
+                fallback = QLabel(
+                    "<h3>Web Browser Not Available</h3>"
+                    "<p>PyQt6-WebEngine is not installed.</p>"
+                    "<p>Install with: <code>sudo pacman -S python-pyqt6-webengine</code></p>"
+                    "<p>You can still paste Workshop URLs or mod IDs above and add them to the queue.</p>"
+                    f"<p><a href='{self.WORKSHOP_URL}'>Open Workshop in Browser</a></p>"
+                )
             fallback.setOpenExternalLinks(True)
             fallback.setWordWrap(True)
             fallback.setAlignment(Qt.AlignmentFlag.AlignCenter)
