@@ -144,7 +144,7 @@ def get_mod_name_from_path(mod_path: Path) -> str:
             name_elem = root.find("name")
             if name_elem is not None and name_elem.text:
                 return name_elem.text.strip()
-        except Exception:
+        except (ET.ParseError, OSError, IOError):
             pass
     
     return mod_path.name
@@ -369,7 +369,7 @@ class LiveDownloadWorker(QThread):
                     else:
                         self.log_output.emit(f"[WARNING] Mod {wid} folder not found after download")
                 
-            except Exception as e:
+            except (OSError, IOError, subprocess.SubprocessError) as e:
                 self.log_output.emit(f"[EXCEPTION] {e}")
         
         return results

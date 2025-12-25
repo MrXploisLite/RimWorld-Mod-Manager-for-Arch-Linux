@@ -257,7 +257,7 @@ After installation, restart this application.
                 self.download_queue.task_done()
             except queue.Empty:
                 break
-            except Exception as e:
+            except (OSError, IOError, subprocess.SubprocessError) as e:
                 if self.current_task:
                     self.current_task.status = DownloadStatus.FAILED
                     self.current_task.error_message = str(e)
@@ -374,7 +374,7 @@ After installation, restart this application.
                 if self.on_error:
                     self.on_error(task, task.error_message)
                 return False
-            except Exception as e:
+            except (OSError, IOError, subprocess.SubprocessError) as e:
                 task.status = DownloadStatus.FAILED
                 task.error_message = str(e)
                 if self.on_error:

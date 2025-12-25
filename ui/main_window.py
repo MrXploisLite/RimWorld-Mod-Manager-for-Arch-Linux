@@ -466,7 +466,7 @@ class GameLaunchDialog(QDialog):
                 )
             self._log(f"[OK] Steam launch command sent!", "#69db7c")
             self.status_label.setText("✅ Launched via Steam!")
-        except Exception as e:
+        except (OSError, subprocess.SubprocessError) as e:
             self._log(f"[ERROR] {e}", "#ff6b6b")
             self.status_label.setText(f"❌ Failed: {e}")
     
@@ -544,7 +544,7 @@ class GameLaunchDialog(QDialog):
                     self._log(f"[OK] Game started!", "#69db7c")
                     self.status_label.setText("✅ Launched!")
                 
-        except Exception as e:
+        except (OSError, subprocess.SubprocessError) as e:
             self._log(f"[ERROR] {e}", "#ff6b6b")
             self.status_label.setText(f"❌ Failed: {e}")
 
@@ -682,7 +682,7 @@ class SettingsDialog(QDialog):
                 subprocess.run(["open", str(self.config.config_dir)], check=False)
             else:
                 subprocess.run(["xdg-open", str(self.config.config_dir)], check=False)
-        except Exception:
+        except (OSError, subprocess.SubprocessError):
             pass
 
 
@@ -1440,7 +1440,7 @@ class MainWindow(QMainWindow):
                 f"Permission denied. Cannot delete:\n{mod.path}\n\n"
                 "Try running the application with elevated permissions."
             )
-        except Exception as e:
+        except (OSError, IOError) as e:
             QMessageBox.critical(
                 self, "Uninstall Failed",
                 f"Failed to uninstall mod:\n{e}"
@@ -1786,7 +1786,7 @@ class MainWindow(QMainWindow):
                 subprocess.run(["open", str(path)], check=False)
             else:  # Linux
                 subprocess.run(["xdg-open", str(path)], check=False)
-        except Exception as e:
+        except (OSError, FileNotFoundError, subprocess.SubprocessError) as e:
             QMessageBox.warning(self, "Error", f"Failed to open folder: {e}")
     
     def _launch_game(self):
@@ -1854,7 +1854,7 @@ class MainWindow(QMainWindow):
                 
                 self.status_bar.showMessage(f"Config exported to {filepath}")
                 QMessageBox.information(self, "Export Successful", f"Configuration exported to:\n{filepath}")
-            except Exception as e:
+            except (OSError, IOError, TypeError, ValueError) as e:
                 QMessageBox.warning(self, "Export Failed", f"Failed to export config:\n{e}")
     
     def _import_config(self):
@@ -1892,7 +1892,7 @@ class MainWindow(QMainWindow):
                 # Refresh installations
                 self._detect_installations()
                 
-            except Exception as e:
+            except (OSError, IOError, json.JSONDecodeError, KeyError, TypeError, ValueError) as e:
                 QMessageBox.warning(self, "Import Failed", f"Failed to import config:\n{e}")
     
     def closeEvent(self, event):

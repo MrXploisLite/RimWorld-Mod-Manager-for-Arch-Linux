@@ -138,7 +138,7 @@ class ModParser:
         if about_xml.exists():
             try:
                 mod = self._parse_about_xml(mod, about_xml)
-            except Exception as e:
+            except (ET.ParseError, OSError, IOError, UnicodeDecodeError) as e:
                 mod.is_valid = False
                 mod.error_message = f"Failed to parse About.xml: {e}"
                 # Try to extract at least the name from folder
@@ -149,7 +149,7 @@ class ModParser:
             if legacy_xml.exists():
                 try:
                     mod = self._parse_about_xml(mod, legacy_xml)
-                except Exception as e:
+                except (ET.ParseError, OSError, IOError, UnicodeDecodeError) as e:
                     mod.is_valid = False
                     mod.error_message = f"Failed to parse About.xml: {e}"
                     mod.name = mod_path.name

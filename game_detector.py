@@ -195,7 +195,7 @@ class GameDetector:
                     for lib in additional:
                         if lib not in libraries:
                             libraries.append(lib)
-                except Exception:
+                except (OSError, IOError, PermissionError):
                     pass
         
         return libraries
@@ -326,7 +326,7 @@ class GameDetector:
                     for lib in additional:
                         if lib not in libraries:
                             libraries.append(lib)
-                except Exception:
+                except (OSError, IOError, PermissionError):
                     pass
         
         # Check common additional library locations
@@ -377,7 +377,7 @@ class GameDetector:
                 lib_path = Path(match)
                 if lib_path.exists():
                     libraries.append(lib_path)
-        except Exception:
+        except (OSError, IOError, PermissionError):
             pass
         
         return libraries

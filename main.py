@@ -133,7 +133,7 @@ def main():
     try:
         window = MainWindow()
         window.show()
-    except Exception as e:
+    except (OSError, IOError, RuntimeError, ValueError, TypeError) as e:
         from PyQt6.QtWidgets import QMessageBox
         QMessageBox.critical(None, "Startup Error", f"Failed to start application:\n{e}")
         return 1
