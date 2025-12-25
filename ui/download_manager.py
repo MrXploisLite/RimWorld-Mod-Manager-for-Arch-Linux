@@ -180,14 +180,35 @@ class LiveDownloadWorker(QThread):
     def run(self):
         success = 0
         failed = 0
+        skipped = 0
         
         self.download_path.mkdir(parents=True, exist_ok=True)
         
-        # Use batch download - single SteamCMD session for all mods
-        self.log_output.emit(f"[INFO] Starting batch download of {len(self.workshop_ids)} mod(s)")
+        # Check which mods already exist
+        ids_to_download = []
+        for wid in self.workshop_ids:
+            existing_path = self.download_path / wid
+            if existing_path.exists() and self._is_valid_mod(existing_path):
+                # Mod already exists, skip download
+                mod_name = get_mod_name_from_path(existing_path)
+                self.log_output.emit(f"[SKIP] Mod {wid} already exists: {mod_name}")
+                self.item_complete.emit(wid, str(existing_path), mod_name)
+                skipped += 1
+            else:
+                ids_to_download.append(wid)
+        
+        if not ids_to_download:
+            self.log_output.emit(f"\n[INFO] All {len(self.workshop_ids)} mod(s) already downloaded!")
+            self.all_complete.emit(skipped, 0)
+            return
+        
+        # Use batch download - single SteamCMD session for remaining mods
+        self.log_output.emit(f"\n[INFO] Starting batch download of {len(ids_to_download)} mod(s)")
+        if skipped > 0:
+            self.log_output.emit(f"[INFO] Skipped {skipped} already downloaded mod(s)")
         self.log_output.emit(f"[INFO] Using single SteamCMD session for efficiency\n")
         
-        results = self._download_batch(self.workshop_ids)
+        results = self._download_batch(ids_to_download)
         
         for wid, result_path in results.items():
             if result_path:
@@ -199,7 +220,16 @@ class LiveDownloadWorker(QThread):
                 failed += 1
                 self.item_failed.emit(wid, "Download failed")
         
-        self.all_complete.emit(success, failed)
+        self.all_complete.emit(success + skipped, failed)
+    
+    def _is_valid_mod(self, mod_path: Path) -> bool:
+        """Check if a mod folder is valid (has About.xml)."""
+        about_xml = mod_path / "About" / "About.xml"
+        if about_xml.exists():
+            return True
+        # Try lowercase
+        about_xml_lower = mod_path / "About" / "about.xml"
+        return about_xml_lower.exists()
     
     def _download_batch(self, workshop_ids: list[str]) -> dict[str, Optional[Path]]:
         """Download multiple mods in a single SteamCMD session."""
@@ -444,13 +474,21 @@ class DownloadLogWidget(QWidget):
         # Clear previous state
         self.queue_list.clear()
         self._items.clear()
+        self.log_text.clear()
         
         # Add items to queue
         for wid in workshop_ids:
             item = DownloadItem(workshop_id=wid, name=f"Workshop Mod {wid}")
             self._items[wid] = item
             
-            list_item = QListWidgetItem(f"⏳ Mod {wid} - Pending")
+            # Check if already exists
+            existing_path = download_path / wid
+            if existing_path.exists():
+                list_item = QListWidgetItem(f"📦 Mod {wid} - Already downloaded")
+                list_item.setForeground(QColor("#888888"))
+            else:
+                list_item = QListWidgetItem(f"⏳ Mod {wid} - Pending")
+            
             list_item.setData(Qt.ItemDataRole.UserRole, wid)
             self.queue_list.addItem(list_item)
         
