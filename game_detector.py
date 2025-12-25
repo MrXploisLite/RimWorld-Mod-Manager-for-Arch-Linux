@@ -557,7 +557,10 @@ class GameDetector:
                     install.proton_prefix = Path(game_path_str[:prefix_idx])
                     install.is_windows_build = True
         
-        # Collect all possible prefixes to check
+        # Collect all possible prefixes to check with their config paths
+        # We'll score them and pick the best one
+        candidate_configs = []  # List of (config_path, save_path, prefix, score)
+        
         prefixes_to_check = []
         
         if install.proton_prefix:
@@ -621,51 +624,93 @@ class GameDetector:
                 except PermissionError:
                     pass
         
-        # Search for config in all prefixes
+        # Search for config in all prefixes and score them
+        def find_rimworld_config_in_prefix(prefix: Path) -> list[tuple]:
+            """Find all RimWorld config folders in a prefix, return (config_path, save_path, score)"""
+            results = []
+            
+            users_path = prefix / "drive_c/users"
+            if not users_path.exists():
+                return results
+            
+            try:
+                for user_folder in users_path.iterdir():
+                    if not user_folder.is_dir() or user_folder.name in ("Public", "Default"):
+                        continue
+                    
+                    ludeon_path = user_folder / "AppData/LocalLow/Ludeon Studios"
+                    if not ludeon_path.exists():
+                        continue
+                    
+                    for folder in ludeon_path.iterdir():
+                        if folder.is_dir() and "rimworld" in folder.name.lower():
+                            config_path = folder / "Config"
+                            save_path = folder / "Saves"
+                            
+                            if config_path.exists():
+                                # Calculate score based on:
+                                # 1. ModsConfig.xml exists and is recent
+                                # 2. Has saves (indicates active use)
+                                score = 0
+                                
+                                mods_config = config_path / "ModsConfig.xml"
+                                if mods_config.exists():
+                                    score += 100
+                                    # Bonus for recent modification (within last 7 days)
+                                    try:
+                                        import time
+                                        mtime = mods_config.stat().st_mtime
+                                        age_days = (time.time() - mtime) / 86400
+                                        if age_days < 1:
+                                            score += 50  # Modified today
+                                        elif age_days < 7:
+                                            score += 30  # Modified this week
+                                        elif age_days < 30:
+                                            score += 10  # Modified this month
+                                    except OSError:
+                                        pass
+                                
+                                # Bonus for having saves
+                                if save_path.exists():
+                                    try:
+                                        save_count = len(list(save_path.glob("*.rws")))
+                                        if save_count > 0:
+                                            score += 20 + min(save_count, 10)  # Up to 30 points for saves
+                                    except OSError:
+                                        pass
+                                
+                                # Bonus for steamuser (common default)
+                                if user_folder.name == "steamuser":
+                                    score += 5
+                                
+                                results.append((config_path, save_path, score))
+            except PermissionError:
+                pass
+            
+            return results
+        
+        # Collect all candidates
         for prefix in prefixes_to_check:
             if not prefix or not prefix.exists():
                 continue
             
-            # Try exact path first
-            base = prefix / "drive_c/users/steamuser/AppData/LocalLow/Ludeon Studios/RimWorld by Ludeon Studios"
-            if base.exists():
-                install.save_path = base / "Saves"
-                install.config_path = base / "Config"
-                if not install.proton_prefix:
-                    install.proton_prefix = prefix
-                return
+            configs = find_rimworld_config_in_prefix(prefix)
+            for config_path, save_path, score in configs:
+                candidate_configs.append((config_path, save_path, prefix, score))
+        
+        # Sort by score (highest first) and pick the best
+        if candidate_configs:
+            candidate_configs.sort(key=lambda x: x[3], reverse=True)
+            best = candidate_configs[0]
+            install.config_path = best[0]
+            install.save_path = best[1]
+            if not install.proton_prefix:
+                install.proton_prefix = best[2]
             
-            # Try to find folder with rimworld in name
-            alt_base = prefix / "drive_c/users/steamuser/AppData/LocalLow/Ludeon Studios"
-            if alt_base.exists():
-                try:
-                    for folder in alt_base.iterdir():
-                        if folder.is_dir() and "rimworld" in folder.name.lower():
-                            install.save_path = folder / "Saves"
-                            install.config_path = folder / "Config"
-                            if not install.proton_prefix:
-                                install.proton_prefix = prefix
-                            return
-                except PermissionError:
-                    continue
-            
-            # Try other user folders (not just steamuser)
-            users_path = prefix / "drive_c/users"
-            if users_path.exists():
-                try:
-                    for user_folder in users_path.iterdir():
-                        if user_folder.is_dir() and user_folder.name not in ("Public", "Default"):
-                            ludeon_path = user_folder / "AppData/LocalLow/Ludeon Studios"
-                            if ludeon_path.exists():
-                                for folder in ludeon_path.iterdir():
-                                    if folder.is_dir() and "rimworld" in folder.name.lower():
-                                        install.save_path = folder / "Saves"
-                                        install.config_path = folder / "Config"
-                                        if not install.proton_prefix:
-                                            install.proton_prefix = prefix
-                                        return
-                except PermissionError:
-                    continue
+            # Log if multiple candidates found
+            if len(candidate_configs) > 1:
+                log.debug(f"Found {len(candidate_configs)} config candidates, selected: {best[0]} (score: {best[3]})")
+            return
         
         # Native Linux build - standard Unity path
         if not install.is_windows_build:

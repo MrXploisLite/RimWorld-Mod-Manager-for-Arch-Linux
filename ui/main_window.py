@@ -2002,15 +2002,34 @@ class MainWindow(QMainWindow):
         self.profiles_widget.create_auto_backup(active_ids, "Before applying mods")
         
         # Get paths of active mods (exclude Core/DLC - they're already in Data folder)
-        mod_paths = [mod.path for mod in active_mods if mod.path and mod.source != ModSource.GAME]
+        mod_paths = []
+        skipped_mods = []
+        for mod in active_mods:
+            if mod.source == ModSource.GAME:
+                continue  # Skip Core/DLC
+            if not mod.path:
+                skipped_mods.append(f"{mod.display_name()} (no path)")
+                continue
+            if not mod.path.exists():
+                skipped_mods.append(f"{mod.display_name()} (path not found: {mod.path})")
+                continue
+            mod_paths.append(mod.path)
         
-        # Apply symlinks
+        if skipped_mods:
+            log.warning(f"Skipped mods without valid paths: {skipped_mods}")
+        
+        # Apply symlinks/copy
         self.status_bar.showMessage("Applying mod configuration...")
         
         results = self.installer.install_mods(mod_paths, clear_existing=True)
         
         success = sum(1 for v in results.values() if v)
         failed = len(results) - success
+        
+        # Log failed mods
+        if failed > 0:
+            failed_paths = [str(p) for p, v in results.items() if not v]
+            log.error(f"Failed to install mods: {failed_paths}")
         
         # Save active mods to config (by package_id in load order) - includes DLC for UI state
         config_written = False
@@ -2044,9 +2063,16 @@ class MainWindow(QMainWindow):
                 )
         
         # Show result
-        if failed > 0:
-            self.status_bar.showMessage(f"Applied {success} mods, {failed} failed")
-            msg = f"Successfully linked {success} mods.\n{failed} mods failed to link."
+        total_to_install = len(mod_paths)
+        if failed > 0 or skipped_mods:
+            self.status_bar.showMessage(f"Applied {success} mods, {failed} failed, {len(skipped_mods)} skipped")
+            msg = f"Successfully linked {success} of {total_to_install} mods."
+            if failed > 0:
+                msg += f"\n{failed} mods failed to link."
+            if skipped_mods:
+                msg += f"\n\nSkipped (no valid path):\n" + "\n".join(skipped_mods[:5])
+                if len(skipped_mods) > 5:
+                    msg += f"\n... and {len(skipped_mods) - 5} more"
             if config_warning:
                 msg += f"\n\n⚠️ {config_warning}"
             QMessageBox.warning(self, "Partial Success", msg)
