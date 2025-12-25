@@ -1458,17 +1458,36 @@ class MainWindow(QMainWindow):
                 install.config_path = Path(override_path)
                 log.info(f"Using config path override: {override_path}")
             
-            # Set up installer
-            # Use copy mode for Proton/Wine (Windows builds on Linux) - symlinks don't work
+            # Set up installer - for standalone games, we download directly to Mods folder
+            # so no symlink/copy is needed. Just update ModsConfig.xml.
             mods_folder = self.game_detector.get_mods_folder(install)
+            
+            # For standalone/custom games, default download path to game's Mods folder
+            # This simplifies everything - no copy/symlink needed!
+            if install.install_type in (InstallationType.CUSTOM, InstallationType.STANDALONE, 
+                                        InstallationType.PROTON_STANDALONE, InstallationType.GOG):
+                # Set download path to game's Mods folder if not already set
+                current_download_path = self.config.config.workshop_download_path
+                if not current_download_path or not Path(current_download_path).exists():
+                    self.config.config.workshop_download_path = str(mods_folder)
+                    self.config.save()
+                    log.info(f"Auto-set download path to game's Mods folder: {mods_folder}")
+            
+            # Use copy mode for Proton/Wine (Windows builds on Linux) - symlinks don't work
+            # But if downloading directly to Mods folder, copy is not needed anyway
             use_copy = install.is_windows_build and install.proton_prefix is not None
             self.installer = ModInstaller(mods_folder, use_copy=use_copy)
             if use_copy:
                 log.info(f"ModInstaller using copy mode for Proton/Wine compatibility")
             
-            # Set up downloader
-            workshop_path = self.config.get_default_workshop_path()
-            self.downloader = WorkshopDownloader(workshop_path)
+            # Set up downloader - use game's Mods folder as default for standalone
+            download_path = self.config.get_default_workshop_path()
+            
+            # If download path is game's Mods folder, log it
+            if Path(download_path).resolve() == mods_folder.resolve():
+                log.info(f"Downloading mods directly to game's Mods folder (no copy needed)")
+            
+            self.downloader = WorkshopDownloader(download_path)
             
             # Set up workshop browser
             self._setup_workshop_browser()
@@ -1575,40 +1594,37 @@ class MainWindow(QMainWindow):
         self.active_list.clear_mods()
         self.mod_parser.clear_cache()
         
-        # Collect paths to scan - ORDER MATTERS for deduplication
-        # Priority: Workshop > User paths > Game's Mods folder
-        # This ensures we use Workshop version when duplicates exist
-        paths_to_scan = []
         game_mods_path = self.current_installation.path / "Mods"
+        download_path = Path(self.config.config.workshop_download_path) if self.config.config.workshop_download_path else None
+        
+        # Check if we're in "direct mode" (download to game's Mods folder)
+        direct_mode = download_path and download_path.resolve() == game_mods_path.resolve()
+        
+        # Collect paths to scan
+        paths_to_scan = []
         
         # 1. Game's Data folder (Core/DLCs) - always first
         data_path = self.current_installation.path / "Data"
         if data_path.exists():
             paths_to_scan.append(data_path)
         
-        # 2. Workshop mods - scan BEFORE game's Mods folder
-        workshop = self.game_detector.find_workshop_mods_path()
-        if workshop and workshop.exists():
-            paths_to_scan.append(workshop)
-        
-        # 3. User-defined mod paths
-        for path_str in self.config.config.mod_source_paths:
-            path = Path(path_str)
-            if path.exists() and path not in paths_to_scan:
-                # Don't add game's Mods folder as a source
-                if path.resolve() != game_mods_path.resolve():
-                    paths_to_scan.append(path)
-        
-        # 4. Game's Mods folder - scan LAST (lowest priority for duplicates)
-        # Only scan mods that aren't symlinks (symlinks point to sources we already scanned)
-        game_mods_to_scan = []
+        # 2. Game's Mods folder - primary source for mods
         if game_mods_path.exists():
-            for item in game_mods_path.iterdir():
-                if item.is_symlink():
-                    # Skip symlinks - they point to sources we already scanned
-                    continue
-                elif item.is_dir() and not item.name.endswith('.txt'):
-                    game_mods_to_scan.append(item)
+            paths_to_scan.append(game_mods_path)
+        
+        # 3. If NOT in direct mode, also scan external sources
+        if not direct_mode:
+            # Workshop mods (Steam)
+            workshop = self.game_detector.find_workshop_mods_path()
+            if workshop and workshop.exists() and workshop.resolve() != game_mods_path.resolve():
+                paths_to_scan.append(workshop)
+            
+            # User-defined mod paths
+            for path_str in self.config.config.mod_source_paths:
+                path = Path(path_str)
+                if path.exists() and path.resolve() != game_mods_path.resolve():
+                    if path not in paths_to_scan:
+                        paths_to_scan.append(path)
         
         # Scan directories
         all_mods = []
@@ -1617,26 +1633,17 @@ class MainWindow(QMainWindow):
             # Determine source type
             if path.name == "Data":
                 source = ModSource.GAME
-                mods = self.mod_parser.scan_directory(path, source)
+            elif path.resolve() == game_mods_path.resolve():
+                source = ModSource.LOCAL  # Mods in game folder
             elif "workshop" in str(path).lower():
                 source = ModSource.WORKSHOP
-                mods = self.mod_parser.scan_directory(path, source)
             else:
                 source = ModSource.LOCAL
-                mods = self.mod_parser.scan_directory(path, source)
             
+            mods = self.mod_parser.scan_directory(path, source)
             all_mods.extend(mods)
         
-        # Scan game's Mods folder last (individual mods, not symlinks)
-        for mod_path in game_mods_to_scan:
-            mod = self.mod_parser.parse_mod(mod_path)
-            if mod and mod.is_valid:
-                # Mark as LOCAL since it's in game folder but not from Workshop
-                mod.source = ModSource.LOCAL
-                all_mods.append(mod)
-        
         # Remove duplicates by package_id - FIRST occurrence wins
-        # Since Workshop is scanned first, Workshop version is preferred
         seen = {}
         unique_mods = []
         for mod in all_mods:
@@ -1644,10 +1651,6 @@ class MainWindow(QMainWindow):
             if key not in seen:
                 seen[key] = mod
                 unique_mods.append(mod)
-            else:
-                # Log duplicate for debugging
-                existing = seen[key]
-                log.debug(f"Duplicate mod {key}: keeping {existing.source.value} from {existing.path}, skipping {mod.source.value} from {mod.path}")
         
         self.all_mods = unique_mods
         
@@ -2002,7 +2005,7 @@ class MainWindow(QMainWindow):
     
     def _apply_mods(self):
         """Apply the current mod configuration to the game."""
-        if not self.installer:
+        if not self.current_installation:
             QMessageBox.warning(self, "Error", "No installation selected")
             return
         
@@ -2012,45 +2015,61 @@ class MainWindow(QMainWindow):
         active_ids = [mod.package_id for mod in active_mods]
         self.profiles_widget.create_auto_backup(active_ids, "Before applying mods")
         
-        # Get paths of active mods (exclude Core/DLC - they're already in Data folder)
-        mod_paths = []
-        skipped_mods = []
-        for mod in active_mods:
-            if mod.source == ModSource.GAME:
-                continue  # Skip Core/DLC
-            if not mod.path:
-                skipped_mods.append(f"{mod.display_name()} (no path)")
-                continue
-            if not mod.path.exists():
-                skipped_mods.append(f"{mod.display_name()} (path not found: {mod.path})")
-                continue
-            mod_paths.append(mod.path)
+        # Check if we need to copy mods or if they're already in game's Mods folder
+        game_mods_folder = self.current_installation.path / "Mods"
+        download_path = Path(self.config.config.workshop_download_path) if self.config.config.workshop_download_path else None
         
-        if skipped_mods:
-            log.warning(f"Skipped mods without valid paths: {skipped_mods}")
+        # If download path is game's Mods folder, no copy needed - just update ModsConfig.xml
+        direct_mode = download_path and download_path.resolve() == game_mods_folder.resolve()
         
-        # Apply symlinks/copy
-        self.status_bar.showMessage("Applying mod configuration...")
+        mods_copied = 0
+        mods_skipped = 0
+        mods_failed = 0
         
-        results = self.installer.install_mods(mod_paths, clear_existing=True)
+        if not direct_mode and self.installer:
+            # Traditional mode: copy/symlink mods from external folder to game's Mods folder
+            self.status_bar.showMessage("Applying mod configuration...")
+            
+            # Get paths of active mods (exclude Core/DLC - they're already in Data folder)
+            mod_paths = []
+            skipped_mods = []
+            for mod in active_mods:
+                if mod.source == ModSource.GAME:
+                    continue  # Skip Core/DLC
+                if not mod.path:
+                    skipped_mods.append(f"{mod.display_name()} (no path)")
+                    continue
+                if not mod.path.exists():
+                    skipped_mods.append(f"{mod.display_name()} (path not found)")
+                    continue
+                mod_paths.append(mod.path)
+            
+            if skipped_mods:
+                log.warning(f"Skipped mods without valid paths: {skipped_mods}")
+            
+            # Apply symlinks/copy
+            results = self.installer.install_mods(mod_paths, clear_existing=True)
+            
+            mods_copied = sum(1 for v in results.values() if v)
+            mods_failed = len(results) - mods_copied
+            mods_skipped = len(skipped_mods)
+            
+            if mods_failed > 0:
+                failed_paths = [str(p) for p, v in results.items() if not v]
+                log.error(f"Failed to install mods: {failed_paths}")
+        else:
+            # Direct mode: mods are already in game's Mods folder, just update ModsConfig.xml
+            self.status_bar.showMessage("Updating mod configuration...")
+            log.info("Direct mode: mods already in game folder, just updating ModsConfig.xml")
         
-        success = sum(1 for v in results.values() if v)
-        failed = len(results) - success
-        
-        # Log failed mods
-        if failed > 0:
-            failed_paths = [str(p) for p, v in results.items() if not v]
-            log.error(f"Failed to install mods: {failed_paths}")
-        
-        # Save active mods to config (by package_id in load order) - includes DLC for UI state
+        # Save active mods to config (by package_id in load order)
         config_written = False
         config_warning = ""
         
         if self.current_installation:
             self.config.save_active_mods(str(self.current_installation.path), active_ids)
             
-            # Write to game's ModsConfig.xml - include ALL mods (Core/DLC + mods)
-            # Game needs Core/DLC in activeMods, otherwise it resets to defaults
+            # Write to game's ModsConfig.xml
             if self.current_installation.config_path:
                 from mod_parser import ModsConfigParser
                 config_parser = ModsConfigParser()
@@ -2067,46 +2086,50 @@ class MainWindow(QMainWindow):
             else:
                 config_warning = (
                     "Could not detect game's config folder.\n"
-                    "Symlinks were created but ModsConfig.xml was NOT updated.\n\n"
-                    "The game won't know which mods to load.\n"
-                    "Please use Profiles > Game Sync tab to export manually,\n"
-                    "or run the game once to create the config folder."
+                    "ModsConfig.xml was NOT updated.\n\n"
+                    "Please use Tools > Installation Info to set the config path."
                 )
         
         # Show result
-        total_to_install = len(mod_paths)
-        if failed > 0 or skipped_mods:
-            self.status_bar.showMessage(f"Applied {success} mods, {failed} failed, {len(skipped_mods)} skipped")
-            msg = f"Successfully linked {success} of {total_to_install} mods."
-            if failed > 0:
-                msg += f"\n{failed} mods failed to link."
-            if skipped_mods:
-                msg += f"\n\nSkipped (no valid path):\n" + "\n".join(skipped_mods[:5])
-                if len(skipped_mods) > 5:
-                    msg += f"\n... and {len(skipped_mods) - 5} more"
-            if config_warning:
-                msg += f"\n\n⚠️ {config_warning}"
-            QMessageBox.warning(self, "Partial Success", msg)
-        else:
+        if direct_mode:
+            # Direct mode - simpler message
             if config_written:
-                self.status_bar.showMessage(f"Applied {success} mods successfully")
+                self.status_bar.showMessage(f"Mod configuration saved ({len(active_ids)} mods)")
                 QMessageBox.information(
                     self, "Success",
-                    f"Successfully applied {success} mod(s) to the game.\n"
-                    f"ModsConfig.xml has been updated."
+                    f"Mod configuration updated!\n\n"
+                    f"{len(active_ids)} mod(s) enabled in ModsConfig.xml.\n"
+                    f"Mods are already in game folder - no copying needed."
                 )
             elif config_warning:
-                self.status_bar.showMessage(f"Applied {success} mods (config warning)")
-                QMessageBox.warning(
-                    self, "Symlinks Created",
-                    f"Successfully linked {success} mod(s).\n\n⚠️ {config_warning}"
-                )
+                self.status_bar.showMessage("Config update failed")
+                QMessageBox.warning(self, "Warning", config_warning)
+        else:
+            # Traditional mode - show copy results
+            if mods_failed > 0 or mods_skipped > 0:
+                self.status_bar.showMessage(f"Applied {mods_copied} mods, {mods_failed} failed, {mods_skipped} skipped")
+                msg = f"Successfully linked {mods_copied} mods."
+                if mods_failed > 0:
+                    msg += f"\n{mods_failed} mods failed to link."
+                if mods_skipped > 0:
+                    msg += f"\n{mods_skipped} mods skipped (no valid path)."
+                if config_warning:
+                    msg += f"\n\n⚠️ {config_warning}"
+                QMessageBox.warning(self, "Partial Success", msg)
             else:
-                self.status_bar.showMessage(f"Applied {success} mods successfully")
-                QMessageBox.information(
-                    self, "Success",
-                    f"Successfully applied {success} mod(s) to the game."
-                )
+                if config_written:
+                    self.status_bar.showMessage(f"Applied {mods_copied} mods successfully")
+                    QMessageBox.information(
+                        self, "Success",
+                        f"Successfully applied {mods_copied} mod(s) to the game.\n"
+                        f"ModsConfig.xml has been updated."
+                    )
+                elif config_warning:
+                    self.status_bar.showMessage(f"Applied {mods_copied} mods (config warning)")
+                    QMessageBox.warning(
+                        self, "Mods Linked",
+                        f"Successfully linked {mods_copied} mod(s).\n\n⚠️ {config_warning}"
+                    )
     
     def _save_modlist(self):
         """Save current mod list to file."""
