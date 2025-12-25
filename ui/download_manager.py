@@ -1,5 +1,5 @@
 """
-Download Manager with Live Logging for RimWorld Mod Manager
+Download Manager with Live Logging for RimModManager
 Provides real-time SteamCMD output and download progress.
 """
 

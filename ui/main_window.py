@@ -1,5 +1,5 @@
 """
-Main Window for RimWorld Mod Manager
+Main Window for RimModManager
 The primary application window with all mod management features.
 """
 
@@ -621,7 +621,7 @@ class MainWindow(QMainWindow):
     
     def _setup_ui(self):
         """Set up the main UI layout."""
-        self.setWindowTitle("RimWorld Mod Manager")
+        self.setWindowTitle("RimModManager")
         self.setMinimumSize(1000, 700)
         
         # Restore window geometry
@@ -1526,9 +1526,9 @@ class MainWindow(QMainWindow):
         """Show about dialog."""
         QMessageBox.about(
             self,
-            "About RimWorld Mod Manager",
-            "<h2>RimWorld Mod Manager</h2>"
-            "<p>A universal mod manager for RimWorld on Linux.</p>"
+            "About RimModManager",
+            "<h2>RimModManager</h2>"
+            "<p>A universal mod manager for RimWorld.</p>"
             "<p>Supports:</p>"
             "<ul>"
             "<li>Steam Native Linux</li>"
@@ -1555,7 +1555,7 @@ class MainWindow(QMainWindow):
         """Export current configuration to a file."""
         filepath, _ = QFileDialog.getSaveFileName(
             self, "Export Configuration",
-            str(Path.home() / "rimworld-mod-manager-config.json"),
+            str(Path.home() / "rimmodmanager-config.json"),
             "JSON Files (*.json)"
         )
         if filepath:

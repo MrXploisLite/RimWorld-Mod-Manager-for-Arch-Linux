@@ -1,4 +1,4 @@
-# Contributing to RimWorld Mod Manager
+# Contributing to RimModManager
 
 First off, thanks for taking the time to contribute! 🎉
 

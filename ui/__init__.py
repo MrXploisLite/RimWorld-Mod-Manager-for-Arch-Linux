@@ -1,5 +1,5 @@
 """
-UI Package for RimWorld Mod Manager
+UI Package for RimModManager
 """
 
 from .mod_widgets import (

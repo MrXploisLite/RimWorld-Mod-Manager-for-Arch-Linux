@@ -1,5 +1,5 @@
 """
-Mod Parser for RimWorld Mod Manager
+Mod Parser for RimModManager
 Parses About/About.xml files and manages mod metadata.
 """
 

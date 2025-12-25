@@ -1,5 +1,5 @@
 """
-Workshop Browser for RimWorld Mod Manager
+Workshop Browser for RimModManager
 Integrated Steam Workshop browser with subscription and download features.
 """
 

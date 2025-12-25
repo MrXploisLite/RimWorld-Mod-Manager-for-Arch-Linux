@@ -1,5 +1,5 @@
 """
-UI Components for RimWorld Mod Manager
+UI Components for RimModManager
 Custom widgets for mod list, drag-drop, and mod details.
 """
 

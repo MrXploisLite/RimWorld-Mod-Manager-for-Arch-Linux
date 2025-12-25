@@ -1,5 +1,5 @@
 """
-Workshop Downloader for RimWorld Mod Manager
+Workshop Downloader for RimModManager
 SteamCMD integration for downloading Workshop mods anonymously.
 """
 

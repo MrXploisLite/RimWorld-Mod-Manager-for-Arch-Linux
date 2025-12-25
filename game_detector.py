@@ -1,5 +1,5 @@
 """
-Game Detector for RimWorld Mod Manager
+Game Detector for RimModManager
 Detects all RimWorld installations on Linux including:
 - Steam native Linux version
 - Steam Windows version via Proton

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-RimWorld Mod Manager for Arch Linux
-A universal mod manager supporting all common RimWorld installation types on Linux.
+RimModManager
+A universal mod manager for RimWorld supporting all platforms.
 
 Author: RimWorld Linux Community
 License: MIT
@@ -49,7 +49,7 @@ def setup_environment():
     
     # Ensure XDG directories exist
     xdg_config = os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config"))
-    config_dir = Path(xdg_config) / "rimworld-mod-manager"
+    config_dir = Path(xdg_config) / "rimmodmanager"
     config_dir.mkdir(parents=True, exist_ok=True)
     
     # Set Qt environment for better theme integration
@@ -79,10 +79,10 @@ def main():
     
     # Create application
     app = QApplication(sys.argv)
-    app.setApplicationName("RimWorld Mod Manager")
-    app.setApplicationDisplayName("RimWorld Mod Manager")
-    app.setOrganizationName("RimWorld Linux")
-    app.setOrganizationDomain("rimworld.linux")
+    app.setApplicationName("RimModManager")
+    app.setApplicationDisplayName("RimModManager")
+    app.setOrganizationName("RimModManager")
+    app.setOrganizationDomain("rimmodmanager.app")
     
     # Set up style
     app.setStyle("Fusion")

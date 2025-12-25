@@ -1,6 +1,6 @@
 """
-Configuration Handler for RimWorld Mod Manager
-XDG-compliant configuration storage at ~/.config/rimworld-mod-manager/
+Configuration Handler for RimModManager
+XDG-compliant configuration storage at ~/.config/rimmodmanager/
 """
 
 import json
@@ -53,7 +53,7 @@ class ConfigHandler:
     Uses XDG Base Directory specification for Linux.
     """
     
-    CONFIG_DIR_NAME = "rimworld-mod-manager"
+    CONFIG_DIR_NAME = "rimmodmanager"
     CONFIG_FILE_NAME = "config.json"
     MODLISTS_DIR_NAME = "modlists"
     
