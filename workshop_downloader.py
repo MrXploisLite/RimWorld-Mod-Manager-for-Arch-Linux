@@ -65,16 +65,35 @@ class WorkshopDownloader:
         self.on_error: Optional[Callable[[DownloadTask, str], None]] = None
     
     def _find_steamcmd(self) -> str:
-        """Find SteamCMD executable."""
-        # Check common locations
-        paths_to_check = [
-            "steamcmd",  # In PATH
-            "/usr/bin/steamcmd",
-            "/usr/games/steamcmd",
-            str(Path.home() / "steamcmd/steamcmd.sh"),
-            str(Path.home() / ".local/share/Steam/steamcmd/steamcmd.sh"),
-            str(Path.home() / ".steam/steam/steamcmd/steamcmd.sh"),
-        ]
+        """Find SteamCMD executable - cross-platform."""
+        import platform
+        system = platform.system().lower()
+        
+        if system == 'windows':
+            paths_to_check = [
+                "steamcmd.exe",
+                str(Path.home() / "steamcmd/steamcmd.exe"),
+                "C:/steamcmd/steamcmd.exe",
+                "C:/Program Files/steamcmd/steamcmd.exe",
+                "C:/Program Files (x86)/steamcmd/steamcmd.exe",
+            ]
+        elif system == 'darwin':  # macOS
+            paths_to_check = [
+                "steamcmd",
+                "/usr/local/bin/steamcmd",
+                "/opt/homebrew/bin/steamcmd",
+                str(Path.home() / "steamcmd/steamcmd.sh"),
+                str(Path.home() / "Library/Application Support/Steam/steamcmd/steamcmd.sh"),
+            ]
+        else:  # Linux
+            paths_to_check = [
+                "steamcmd",  # In PATH
+                "/usr/bin/steamcmd",
+                "/usr/games/steamcmd",
+                str(Path.home() / "steamcmd/steamcmd.sh"),
+                str(Path.home() / ".local/share/Steam/steamcmd/steamcmd.sh"),
+                str(Path.home() / ".steam/steam/steamcmd/steamcmd.sh"),
+            ]
         
         for path in paths_to_check:
             if shutil.which(path):
@@ -104,26 +123,54 @@ class WorkshopDownloader:
             return False
     
     def get_install_instructions(self) -> str:
-        """Get installation instructions for SteamCMD on Arch Linux."""
-        return """
+        """Get installation instructions for SteamCMD - cross-platform."""
+        import platform
+        system = platform.system().lower()
+        
+        if system == 'windows':
+            return """
 SteamCMD is required to download Workshop mods.
 
-SteamCMD is in the AUR (Arch User Repository), NOT official repos.
+Windows Installation:
+1. Download from: https://steamcdn-a.akamaihd.net/client/installer/steamcmd.zip
+2. Extract to C:\\steamcmd\\
+3. Run steamcmd.exe once to complete setup
+4. Restart this application
 
-Install using an AUR helper:
+Or use Chocolatey:
+    choco install steamcmd
+"""
+        elif system == 'darwin':  # macOS
+            return """
+SteamCMD is required to download Workshop mods.
 
+macOS Installation (using Homebrew):
+    brew install steamcmd
+
+If you don't have Homebrew:
+    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+    brew install steamcmd
+
+After installation, restart this application.
+"""
+        else:  # Linux
+            return """
+SteamCMD is required to download Workshop mods.
+
+Arch Linux / CachyOS / EndeavourOS (AUR):
     yay -S steamcmd
-    # or
-    paru -S steamcmd
+    # or: paru -S steamcmd
 
-Manual installation (if no AUR helper):
+Ubuntu / Debian:
+    sudo apt install steamcmd
 
+Fedora:
+    sudo dnf install steamcmd
+
+Manual installation (Arch):
     git clone https://aur.archlinux.org/steamcmd.git
     cd steamcmd
     makepkg -si
-
-For Manjaro with pamac:
-    pamac build steamcmd
 
 After installation, restart this application.
 """

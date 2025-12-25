@@ -1,13 +1,32 @@
 """
 Configuration Handler for RimModManager
-XDG-compliant configuration storage at ~/.config/rimmodmanager/
+Cross-platform configuration storage.
+- Windows: %APPDATA%/RimModManager/
+- macOS: ~/Library/Application Support/RimModManager/
+- Linux: ~/.config/rimmodmanager/
 """
 
 import json
 import os
+import sys
+import platform
 from pathlib import Path
 from typing import Any, Optional
 from dataclasses import dataclass, field, asdict
+
+
+def get_platform() -> str:
+    """Get current platform: 'windows', 'macos', or 'linux'."""
+    system = platform.system().lower()
+    if system == 'darwin':
+        return 'macos'
+    elif system == 'windows':
+        return 'windows'
+    else:
+        return 'linux'
+
+
+PLATFORM = get_platform()
 
 
 @dataclass
@@ -50,10 +69,10 @@ class AppConfig:
 class ConfigHandler:
     """
     Handles loading, saving, and accessing application configuration.
-    Uses XDG Base Directory specification for Linux.
+    Cross-platform config directory support.
     """
     
-    CONFIG_DIR_NAME = "rimmodmanager"
+    CONFIG_DIR_NAME = "RimModManager" if PLATFORM == 'windows' else "rimmodmanager"
     CONFIG_FILE_NAME = "config.json"
     MODLISTS_DIR_NAME = "modlists"
     
@@ -70,13 +89,26 @@ class ConfigHandler:
         self.load()
     
     def _get_config_dir(self) -> Path:
-        """Get XDG-compliant config directory."""
-        xdg_config_home = os.environ.get("XDG_CONFIG_HOME")
-        if xdg_config_home:
-            base = Path(xdg_config_home)
+        """Get platform-specific config directory."""
+        if PLATFORM == 'windows':
+            # Windows: %APPDATA%/RimModManager/
+            appdata = os.environ.get('APPDATA')
+            if appdata:
+                return Path(appdata) / self.CONFIG_DIR_NAME
+            return Path.home() / 'AppData' / 'Roaming' / self.CONFIG_DIR_NAME
+        
+        elif PLATFORM == 'macos':
+            # macOS: ~/Library/Application Support/RimModManager/
+            return Path.home() / 'Library' / 'Application Support' / self.CONFIG_DIR_NAME
+        
         else:
-            base = Path.home() / ".config"
-        return base / self.CONFIG_DIR_NAME
+            # Linux: XDG config directory
+            xdg_config_home = os.environ.get("XDG_CONFIG_HOME")
+            if xdg_config_home:
+                base = Path(xdg_config_home)
+            else:
+                base = Path.home() / ".config"
+            return base / self.CONFIG_DIR_NAME
     
     def _ensure_directories(self) -> None:
         """Create config directories if they don't exist."""

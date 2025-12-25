@@ -6,16 +6,14 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![PyQt6](https://img.shields.io/badge/GUI-PyQt6-green.svg)](https://www.riverbankcomputing.com/software/pyqt/)
 
-A universal mod manager for RimWorld. Currently supports Linux (Arch-based distros), with cross-platform support coming soon.
+A universal mod manager for RimWorld. Supports Windows, macOS, and Linux.
 
 ## ✨ Features
 
 ### 🎮 Universal Game Detection
-- Steam native Linux version
-- Steam Windows version via Proton
-- Flatpak Steam installations
-- Standalone Windows versions via Wine
-- Custom user-defined paths
+- **Windows**: Steam, GOG, standalone installations
+- **macOS**: Steam, GOG, standalone installations
+- **Linux**: Steam native, Proton, Flatpak, Wine, standalone
 
 ### 📦 Mod Management
 - Drag-and-drop load order management
@@ -40,12 +38,37 @@ A universal mod manager for RimWorld. Currently supports Linux (Arch-based distr
 
 ## 🚀 Installation
 
-### Arch Linux / CachyOS / EndeavourOS
+### Windows
+```powershell
+# Install Python from https://python.org
+pip install PyQt6 PyQt6-WebEngine
+
+# SteamCMD (for Workshop downloads)
+# Download from: https://steamcdn-a.akamaihd.net/client/installer/steamcmd.zip
+# Or with Chocolatey: choco install steamcmd
+```
+
+### macOS
+```bash
+# Install Python from https://python.org or Homebrew
+pip install PyQt6 PyQt6-WebEngine
+
+# SteamCMD
+brew install steamcmd
+```
+
+### Linux (Arch / CachyOS / EndeavourOS)
 ```bash
 sudo pacman -S python python-pyqt6 python-pyqt6-webengine
 
-# For Workshop downloads (AUR)
+# SteamCMD from AUR
 yay -S steamcmd
+```
+
+### Linux (Ubuntu / Debian)
+```bash
+pip install PyQt6 PyQt6-WebEngine
+sudo apt install steamcmd
 ```
 
 ### Run
@@ -53,19 +76,6 @@ yay -S steamcmd
 git clone https://github.com/MrXploisLite/RimModManager.git
 cd RimModManager
 python main.py
-```
-
-### Desktop Entry (Optional)
-Create `~/.local/share/applications/rimmodmanager.desktop`:
-```ini
-[Desktop Entry]
-Name=RimModManager
-Comment=Universal RimWorld Mod Manager
-Exec=/usr/bin/python /path/to/rimmodmanager/main.py
-Icon=application-x-executable
-Terminal=false
-Type=Application
-Categories=Game;Utility;
 ```
 
 ## 📖 Usage
@@ -76,15 +86,18 @@ Categories=Game;Utility;
 4. Click "Apply Load Order" to save changes
 5. Click "🎮 Play RimWorld" to launch
 
-### Configuration
-Config stored in `~/.config/rimmodmanager/config.json`
+### Configuration Locations
+- **Windows**: `%APPDATA%/RimModManager/config.json`
+- **macOS**: `~/Library/Application Support/RimModManager/config.json`
+- **Linux**: `~/.config/rimmodmanager/config.json`
 
 ## 🔧 Troubleshooting
 
 ### SteamCMD not found
-```bash
-yay -S steamcmd
-```
+- **Windows**: Download from Steam or use `choco install steamcmd`
+- **macOS**: `brew install steamcmd`
+- **Linux (Arch)**: `yay -S steamcmd`
+- **Linux (Ubuntu)**: `sudo apt install steamcmd`
 
 ### No installations detected
 Add custom path with "Add Custom" button

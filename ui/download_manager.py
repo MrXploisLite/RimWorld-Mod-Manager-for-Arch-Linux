@@ -42,18 +42,48 @@ class DownloadItem:
 
 
 class SteamCMDChecker:
-    """Utility to check and help install SteamCMD."""
+    """Utility to check and help install SteamCMD - cross-platform."""
+    
+    @staticmethod
+    def get_platform() -> str:
+        """Get current platform."""
+        import platform
+        system = platform.system().lower()
+        if system == 'darwin':
+            return 'macos'
+        elif system == 'windows':
+            return 'windows'
+        return 'linux'
     
     @staticmethod
     def find_steamcmd() -> Optional[str]:
-        """Find SteamCMD executable."""
-        paths = [
-            "steamcmd",
-            "/usr/bin/steamcmd",
-            "/usr/games/steamcmd",
-            str(Path.home() / "steamcmd/steamcmd.sh"),
-            str(Path.home() / ".local/share/Steam/steamcmd/steamcmd.sh"),
-        ]
+        """Find SteamCMD executable - cross-platform."""
+        plat = SteamCMDChecker.get_platform()
+        
+        if plat == 'windows':
+            paths = [
+                "steamcmd.exe",
+                str(Path.home() / "steamcmd/steamcmd.exe"),
+                "C:/steamcmd/steamcmd.exe",
+                "C:/Program Files/steamcmd/steamcmd.exe",
+                "C:/Program Files (x86)/steamcmd/steamcmd.exe",
+            ]
+        elif plat == 'macos':
+            paths = [
+                "steamcmd",
+                "/usr/local/bin/steamcmd",
+                "/opt/homebrew/bin/steamcmd",
+                str(Path.home() / "steamcmd/steamcmd.sh"),
+                str(Path.home() / "Library/Application Support/Steam/steamcmd/steamcmd.sh"),
+            ]
+        else:  # Linux
+            paths = [
+                "steamcmd",
+                "/usr/bin/steamcmd",
+                "/usr/games/steamcmd",
+                str(Path.home() / "steamcmd/steamcmd.sh"),
+                str(Path.home() / ".local/share/Steam/steamcmd/steamcmd.sh"),
+            ]
         
         for path in paths:
             if shutil.which(path):
@@ -70,15 +100,34 @@ class SteamCMDChecker:
     @staticmethod
     def get_install_command() -> str:
         """Get the install command for the current system."""
-        # Check for AUR helpers
-        if shutil.which("yay"):
-            return "yay -S steamcmd"
-        elif shutil.which("paru"):
-            return "paru -S steamcmd"
-        elif shutil.which("pamac"):
-            return "pamac build steamcmd"
-        else:
-            return "git clone https://aur.archlinux.org/steamcmd.git && cd steamcmd && makepkg -si"
+        plat = SteamCMDChecker.get_platform()
+        
+        if plat == 'windows':
+            return (
+                "Download from: https://steamcdn-a.akamaihd.net/client/installer/steamcmd.zip\n"
+                "Extract to C:\\steamcmd\\ and run steamcmd.exe"
+            )
+        elif plat == 'macos':
+            if shutil.which("brew"):
+                return "brew install steamcmd"
+            return (
+                "Install Homebrew first: /bin/bash -c \"$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\"\n"
+                "Then: brew install steamcmd"
+            )
+        else:  # Linux
+            # Check for AUR helpers
+            if shutil.which("yay"):
+                return "yay -S steamcmd"
+            elif shutil.which("paru"):
+                return "paru -S steamcmd"
+            elif shutil.which("pamac"):
+                return "pamac build steamcmd"
+            elif shutil.which("apt"):
+                return "sudo apt install steamcmd"
+            elif shutil.which("dnf"):
+                return "sudo dnf install steamcmd"
+            else:
+                return "git clone https://aur.archlinux.org/steamcmd.git && cd steamcmd && makepkg -si"
 
 
 def get_mod_name_from_path(mod_path: Path) -> str:

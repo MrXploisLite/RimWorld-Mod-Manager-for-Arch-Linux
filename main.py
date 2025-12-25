@@ -40,25 +40,40 @@ def check_dependencies() -> bool:
 
 
 def setup_environment():
-    """Set up environment variables and paths."""
+    """Set up environment variables and paths - cross-platform."""
+    import platform
+    system = platform.system().lower()
+    
     # Suppress Qt portal warnings and WebEngine debug output
     os.environ["QT_LOGGING_RULES"] = "qt.qpa.services=false;qt.webenginecontext.debug=false"
     
     # Suppress JS console errors from web engine
     os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = "--disable-logging --log-level=3"
     
-    # Ensure XDG directories exist
-    xdg_config = os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config"))
-    config_dir = Path(xdg_config) / "rimmodmanager"
-    config_dir.mkdir(parents=True, exist_ok=True)
-    
-    # Set Qt environment for better theme integration
-    if "QT_QPA_PLATFORMTHEME" not in os.environ:
-        # Try to detect KDE/Qt theme
-        if os.environ.get("KDE_FULL_SESSION"):
-            os.environ["QT_QPA_PLATFORMTHEME"] = "kde"
-        elif os.environ.get("DESKTOP_SESSION", "").lower() in ("gnome", "ubuntu"):
-            os.environ["QT_QPA_PLATFORMTHEME"] = "gnome"
+    if system == 'windows':
+        # Windows-specific setup
+        appdata = os.environ.get('APPDATA', str(Path.home() / 'AppData/Roaming'))
+        config_dir = Path(appdata) / "RimModManager"
+        config_dir.mkdir(parents=True, exist_ok=True)
+        
+    elif system == 'darwin':  # macOS
+        # macOS-specific setup
+        config_dir = Path.home() / "Library/Application Support/RimModManager"
+        config_dir.mkdir(parents=True, exist_ok=True)
+        
+    else:  # Linux
+        # Ensure XDG directories exist
+        xdg_config = os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config"))
+        config_dir = Path(xdg_config) / "rimmodmanager"
+        config_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Set Qt environment for better theme integration
+        if "QT_QPA_PLATFORMTHEME" not in os.environ:
+            # Try to detect KDE/Qt theme
+            if os.environ.get("KDE_FULL_SESSION"):
+                os.environ["QT_QPA_PLATFORMTHEME"] = "kde"
+            elif os.environ.get("DESKTOP_SESSION", "").lower() in ("gnome", "ubuntu"):
+                os.environ["QT_QPA_PLATFORMTHEME"] = "gnome"
 
 
 def main():

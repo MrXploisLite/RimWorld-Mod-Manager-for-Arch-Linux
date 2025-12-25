@@ -1,27 +1,43 @@
 """
 Game Detector for RimModManager
-Detects all RimWorld installations on Linux including:
-- Steam native Linux version
-- Steam Windows version via Proton
-- Non-Steam/cracked versions via Wine/Proton
-- Flatpak Steam installations
-- Custom user-defined paths
+Cross-platform RimWorld installation detection:
+- Windows: Steam, GOG, standalone
+- macOS: Steam, GOG, standalone
+- Linux: Steam native, Proton, Flatpak, Wine, standalone
 """
 
 import os
-import re
+import platform
 from pathlib import Path
 from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
 
 
+def get_platform() -> str:
+    """Get current platform: 'windows', 'macos', or 'linux'."""
+    system = platform.system().lower()
+    if system == 'darwin':
+        return 'macos'
+    elif system == 'windows':
+        return 'windows'
+    else:
+        return 'linux'
+
+
+PLATFORM = get_platform()
+
+
 class InstallationType(Enum):
     """Types of RimWorld installations."""
-    STEAM_NATIVE = "Steam (Native Linux)"
+    STEAM_NATIVE = "Steam (Native)"
     STEAM_PROTON = "Steam (Proton/Windows)"
+    STEAM_WINDOWS = "Steam (Windows)"
+    STEAM_MACOS = "Steam (macOS)"
     FLATPAK_STEAM = "Flatpak Steam"
+    GOG = "GOG"
     PROTON_STANDALONE = "Standalone (Proton/Wine)"
+    STANDALONE = "Standalone"
     CUSTOM = "Custom Installation"
     UNKNOWN = "Unknown"
 
@@ -45,10 +61,14 @@ class RimWorldInstallation:
     def display_name(self) -> str:
         """Generate a user-friendly display name."""
         type_short = {
-            InstallationType.STEAM_NATIVE: "[Steam Native]",
+            InstallationType.STEAM_NATIVE: "[Steam]",
             InstallationType.STEAM_PROTON: "[Steam Proton]",
+            InstallationType.STEAM_WINDOWS: "[Steam]",
+            InstallationType.STEAM_MACOS: "[Steam]",
             InstallationType.FLATPAK_STEAM: "[Flatpak]",
+            InstallationType.GOG: "[GOG]",
             InstallationType.PROTON_STANDALONE: "[Standalone]",
+            InstallationType.STANDALONE: "[Standalone]",
             InstallationType.CUSTOM: "[Custom]",
             InstallationType.UNKNOWN: "[Unknown]",
         }
@@ -58,8 +78,8 @@ class RimWorldInstallation:
 
 class GameDetector:
     """
-    Detects RimWorld installations across various Linux setups.
-    Supports Steam native, Proton, Flatpak, Wine, and custom installations.
+    Cross-platform RimWorld installation detector.
+    Supports Windows, macOS, and Linux.
     """
     
     # RimWorld Steam AppID
@@ -78,6 +98,11 @@ class GameDetector:
         "RimWorld",  # Could be Linux binary
     ]
     
+    MACOS_MARKERS = [
+        "RimWorldMac.app",
+        "RimWorld.app",
+    ]
+    
     DATA_FOLDER_MARKERS = [
         "Data",  # Contains Core game data
         "Mods",  # Mods folder
@@ -94,23 +119,115 @@ class GameDetector:
         """
         self.installations = []
         
-        # 1. Check standard Steam installation
-        self._detect_steam_native()
+        if PLATFORM == 'windows':
+            self._detect_windows_steam()
+            self._detect_windows_gog()
+        elif PLATFORM == 'macos':
+            self._detect_macos_steam()
+            self._detect_macos_gog()
+        else:  # Linux
+            self._detect_steam_native()
+            self._detect_steam_proton()
+            self._detect_flatpak_steam()
         
-        # 2. Check Proton prefixes for Windows version
-        self._detect_steam_proton()
-        
-        # 3. Check Flatpak Steam
-        self._detect_flatpak_steam()
-        
-        # 4. Check custom paths
+        # Check custom paths (all platforms)
         self._detect_custom_paths()
         
-        # 5. Detect save/config paths for each installation
+        # Detect save/config paths for each installation
         for install in self.installations:
             self._detect_save_config_paths(install)
         
         return self.installations
+    
+    # ==================== WINDOWS ====================
+    
+    def _detect_windows_steam(self) -> None:
+        """Detect Steam installation on Windows."""
+        steam_paths = [
+            Path(os.environ.get('PROGRAMFILES(X86)', 'C:/Program Files (x86)')) / 'Steam',
+            Path(os.environ.get('PROGRAMFILES', 'C:/Program Files')) / 'Steam',
+            Path('C:/Steam'),
+            Path('D:/Steam'),
+            Path('D:/SteamLibrary'),
+        ]
+        
+        for steam_path in steam_paths:
+            rimworld_path = steam_path / 'steamapps/common/RimWorld'
+            if rimworld_path.exists() and self._is_valid_rimworld(rimworld_path):
+                install = RimWorldInstallation(
+                    path=rimworld_path,
+                    install_type=InstallationType.STEAM_WINDOWS,
+                    has_mods_folder=(rimworld_path / "Mods").exists(),
+                    has_data_folder=(rimworld_path / "Data").exists(),
+                    is_windows_build=True,
+                )
+                if install not in self.installations:
+                    self.installations.append(install)
+    
+    def _detect_windows_gog(self) -> None:
+        """Detect GOG installation on Windows."""
+        gog_paths = [
+            Path(os.environ.get('PROGRAMFILES(X86)', 'C:/Program Files (x86)')) / 'GOG Galaxy/Games/RimWorld',
+            Path(os.environ.get('PROGRAMFILES', 'C:/Program Files')) / 'GOG Galaxy/Games/RimWorld',
+            Path('C:/GOG Games/RimWorld'),
+            Path('D:/GOG Games/RimWorld'),
+        ]
+        
+        for gog_path in gog_paths:
+            if gog_path.exists() and self._is_valid_rimworld(gog_path):
+                install = RimWorldInstallation(
+                    path=gog_path,
+                    install_type=InstallationType.GOG,
+                    has_mods_folder=(gog_path / "Mods").exists(),
+                    has_data_folder=(gog_path / "Data").exists(),
+                    is_windows_build=True,
+                )
+                if install not in self.installations:
+                    self.installations.append(install)
+    
+    # ==================== MACOS ====================
+    
+    def _detect_macos_steam(self) -> None:
+        """Detect Steam installation on macOS."""
+        steam_path = Path.home() / 'Library/Application Support/Steam/steamapps/common/RimWorld'
+        
+        # Check for .app bundle
+        app_path = steam_path / 'RimWorldMac.app'
+        if not app_path.exists():
+            app_path = steam_path
+        
+        if steam_path.exists() and self._is_valid_rimworld(steam_path):
+            install = RimWorldInstallation(
+                path=steam_path,
+                install_type=InstallationType.STEAM_MACOS,
+                has_mods_folder=(steam_path / "Mods").exists(),
+                has_data_folder=(steam_path / "Data").exists(),
+                is_windows_build=False,
+            )
+            self.installations.append(install)
+    
+    def _detect_macos_gog(self) -> None:
+        """Detect GOG installation on macOS."""
+        gog_paths = [
+            Path('/Applications/RimWorld.app'),
+            Path.home() / 'Applications/RimWorld.app',
+        ]
+        
+        for gog_path in gog_paths:
+            if gog_path.exists():
+                # macOS .app bundle - actual game is inside
+                contents_path = gog_path / 'Contents/Resources/Data'
+                if contents_path.exists():
+                    install = RimWorldInstallation(
+                        path=gog_path,
+                        install_type=InstallationType.GOG,
+                        has_mods_folder=(contents_path / "Mods").exists(),
+                        has_data_folder=(contents_path / "Data").exists(),
+                        is_windows_build=False,
+                    )
+                    self.installations.append(install)
+    
+    # ==================== LINUX ====================
     
     def _detect_steam_native(self) -> None:
         """Detect native Linux Steam installation."""
@@ -245,7 +362,60 @@ class GameDetector:
         return None
     
     def _detect_save_config_paths(self, install: RimWorldInstallation) -> None:
-        """Detect save and config paths for an installation."""
+        """Detect save and config paths for an installation - cross-platform."""
+        
+        # ==================== WINDOWS ====================
+        if PLATFORM == 'windows':
+            # Windows saves are in %USERPROFILE%/AppData/LocalLow/Ludeon Studios/RimWorld by Ludeon Studios/
+            locallow = os.environ.get('LOCALAPPDATA', '')
+            if locallow:
+                # LocalLow is actually at same level as Local, not inside it
+                locallow_path = Path(locallow).parent / 'LocalLow'
+            else:
+                locallow_path = Path.home() / 'AppData' / 'LocalLow'
+            
+            rimworld_data = locallow_path / 'Ludeon Studios' / 'RimWorld by Ludeon Studios'
+            if rimworld_data.exists():
+                install.save_path = rimworld_data / 'Saves'
+                install.config_path = rimworld_data / 'Config'
+                return
+            
+            # Try alternate folder names
+            ludeon_path = locallow_path / 'Ludeon Studios'
+            if ludeon_path.exists():
+                try:
+                    for folder in ludeon_path.iterdir():
+                        if folder.is_dir() and 'rimworld' in folder.name.lower():
+                            install.save_path = folder / 'Saves'
+                            install.config_path = folder / 'Config'
+                            return
+                except PermissionError:
+                    pass
+            return
+        
+        # ==================== MACOS ====================
+        if PLATFORM == 'macos':
+            # macOS saves are in ~/Library/Application Support/RimWorld by Ludeon Studios/
+            app_support = Path.home() / 'Library' / 'Application Support'
+            
+            rimworld_data = app_support / 'RimWorld by Ludeon Studios'
+            if rimworld_data.exists():
+                install.save_path = rimworld_data / 'Saves'
+                install.config_path = rimworld_data / 'Config'
+                return
+            
+            # Try alternate folder names
+            try:
+                for folder in app_support.iterdir():
+                    if folder.is_dir() and 'rimworld' in folder.name.lower():
+                        install.save_path = folder / 'Saves'
+                        install.config_path = folder / 'Config'
+                        return
+            except PermissionError:
+                pass
+            return
+        
+        # ==================== LINUX ====================
         # For custom installations, check if there's a proton prefix nearby
         if install.install_type == InstallationType.CUSTOM and not install.proton_prefix:
             # Try to find proton prefix from game path

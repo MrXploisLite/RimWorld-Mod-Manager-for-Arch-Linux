@@ -373,14 +373,25 @@ class GameLaunchDialog(QDialog):
             self._launch_direct(exe_path, game_path, is_windows)
     
     def _check_steam_license(self) -> bool:
-        """Check if user owns RimWorld on Steam."""
-        import subprocess
+        """Check if user owns RimWorld on Steam - cross-platform."""
+        import platform
+        system = platform.system().lower()
         
-        # Check if Steam is running and has RimWorld in library
-        steam_paths = [
-            Path.home() / ".local/share/Steam",
-            Path.home() / ".steam/steam",
-        ]
+        if system == 'windows':
+            # Windows Steam paths
+            steam_paths = [
+                Path(os.environ.get('PROGRAMFILES(X86)', 'C:/Program Files (x86)')) / 'Steam',
+                Path(os.environ.get('PROGRAMFILES', 'C:/Program Files')) / 'Steam',
+            ]
+        elif system == 'darwin':  # macOS
+            steam_paths = [
+                Path.home() / 'Library/Application Support/Steam',
+            ]
+        else:  # Linux
+            steam_paths = [
+                Path.home() / ".local/share/Steam",
+                Path.home() / ".steam/steam",
+            ]
         
         for steam_path in steam_paths:
             # Check appmanifest for RimWorld (294100)
@@ -401,17 +412,27 @@ class GameLaunchDialog(QDialog):
         return False
     
     def _launch_via_steam(self):
-        """Launch via Steam."""
-        import subprocess
+        """Launch via Steam - cross-platform."""
+        import platform
+        system = platform.system().lower()
         
         self._log(f"\n[LAUNCH] Starting via Steam...", "#ffd43b")
         
         try:
-            subprocess.Popen(
-                ["xdg-open", "steam://rungameid/294100"],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL
-            )
+            if system == 'windows':
+                os.startfile("steam://rungameid/294100")
+            elif system == 'darwin':  # macOS
+                subprocess.Popen(
+                    ["open", "steam://rungameid/294100"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL
+                )
+            else:  # Linux
+                subprocess.Popen(
+                    ["xdg-open", "steam://rungameid/294100"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL
+                )
             self._log(f"[OK] Steam launch command sent!", "#69db7c")
             self.status_label.setText("✅ Launched via Steam!")
         except Exception as e:
@@ -419,38 +440,16 @@ class GameLaunchDialog(QDialog):
             self.status_label.setText(f"❌ Failed: {e}")
     
     def _launch_direct(self, exe_path: Path, game_path: Path, is_windows: bool):
-        """Launch game directly from folder."""
-        import subprocess
-        import shutil
+        """Launch game directly from folder - cross-platform."""
+        import platform
+        system = platform.system().lower()
         
         self._log(f"\n[LAUNCH] Starting directly...", "#ffd43b")
         
         try:
-            if is_windows:
-                # Try wine
-                if shutil.which("wine"):
-                    self._log(f"[INFO] Using Wine to run Windows executable", "#74c0fc")
-                    
-                    env = os.environ.copy()
-                    if self.installation.proton_prefix:
-                        env["WINEPREFIX"] = str(self.installation.proton_prefix)
-                        self._log(f"[INFO] WINEPREFIX: {self.installation.proton_prefix}", "#74c0fc")
-                    
-                    subprocess.Popen(
-                        ["wine", str(exe_path)],
-                        cwd=str(game_path),
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL,
-                        env=env
-                    )
-                    self._log(f"[OK] Game started with Wine!", "#69db7c")
-                    self.status_label.setText("✅ Launched with Wine!")
-                else:
-                    self._log(f"[ERROR] Wine not found! Install wine to run Windows games.", "#ff6b6b")
-                    self.status_label.setText("❌ Wine not installed")
-            else:
-                # Native Linux
-                self._log(f"[INFO] Running native Linux executable", "#74c0fc")
+            if system == 'windows':
+                # On Windows, just run the exe directly
+                self._log(f"[INFO] Running Windows executable directly", "#74c0fc")
                 subprocess.Popen(
                     [str(exe_path)],
                     cwd=str(game_path),
@@ -459,6 +458,60 @@ class GameLaunchDialog(QDialog):
                 )
                 self._log(f"[OK] Game started!", "#69db7c")
                 self.status_label.setText("✅ Launched!")
+                
+            elif system == 'darwin':  # macOS
+                if exe_path.suffix == '.app' or '.app' in str(exe_path):
+                    # macOS app bundle
+                    self._log(f"[INFO] Running macOS app bundle", "#74c0fc")
+                    subprocess.Popen(
+                        ["open", str(exe_path)],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL
+                    )
+                else:
+                    subprocess.Popen(
+                        [str(exe_path)],
+                        cwd=str(game_path),
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL
+                    )
+                self._log(f"[OK] Game started!", "#69db7c")
+                self.status_label.setText("✅ Launched!")
+                
+            else:  # Linux
+                if is_windows:
+                    # Try wine
+                    if shutil.which("wine"):
+                        self._log(f"[INFO] Using Wine to run Windows executable", "#74c0fc")
+                        
+                        env = os.environ.copy()
+                        if self.installation.proton_prefix:
+                            env["WINEPREFIX"] = str(self.installation.proton_prefix)
+                            self._log(f"[INFO] WINEPREFIX: {self.installation.proton_prefix}", "#74c0fc")
+                        
+                        subprocess.Popen(
+                            ["wine", str(exe_path)],
+                            cwd=str(game_path),
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL,
+                            env=env
+                        )
+                        self._log(f"[OK] Game started with Wine!", "#69db7c")
+                        self.status_label.setText("✅ Launched with Wine!")
+                    else:
+                        self._log(f"[ERROR] Wine not found! Install wine to run Windows games.", "#ff6b6b")
+                        self.status_label.setText("❌ Wine not installed")
+                else:
+                    # Native Linux
+                    self._log(f"[INFO] Running native Linux executable", "#74c0fc")
+                    subprocess.Popen(
+                        [str(exe_path)],
+                        cwd=str(game_path),
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL
+                    )
+                    self._log(f"[OK] Game started!", "#69db7c")
+                    self.status_label.setText("✅ Launched!")
                 
         except Exception as e:
             self._log(f"[ERROR] {e}", "#ff6b6b")
@@ -587,7 +640,19 @@ class SettingsDialog(QDialog):
     
     def _open_config_dir(self):
         import subprocess
-        subprocess.run(["xdg-open", str(self.config.config_dir)], check=False)
+        import platform
+        import os
+        system = platform.system().lower()
+        
+        try:
+            if system == 'windows':
+                os.startfile(str(self.config.config_dir))
+            elif system == 'darwin':
+                subprocess.run(["open", str(self.config.config_dir)], check=False)
+            else:
+                subprocess.run(["xdg-open", str(self.config.config_dir)], check=False)
+        except Exception:
+            pass
 
 
 class MainWindow(QMainWindow):
@@ -1506,9 +1571,17 @@ class MainWindow(QMainWindow):
                 self._open_folder(path)
     
     def _open_folder(self, path: Path):
-        """Open a folder in the default file manager."""
+        """Open a folder in the default file manager - cross-platform."""
+        import platform
+        system = platform.system().lower()
+        
         try:
-            subprocess.run(["xdg-open", str(path)], check=False)
+            if system == 'windows':
+                os.startfile(str(path))
+            elif system == 'darwin':  # macOS
+                subprocess.run(["open", str(path)], check=False)
+            else:  # Linux
+                subprocess.run(["xdg-open", str(path)], check=False)
         except Exception as e:
             QMessageBox.warning(self, "Error", f"Failed to open folder: {e}")
     
