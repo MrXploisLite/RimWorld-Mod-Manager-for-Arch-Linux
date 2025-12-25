@@ -442,6 +442,44 @@ class GameLaunchDialog(QDialog):
         self._log(f"[--] No Steam license/manifest found", "#888888")
         return False
     
+    def _find_proton(self) -> Optional[str]:
+        """Find Proton executable - checks system proton and Steam proton."""
+        import shutil
+        
+        # Check for system-installed proton (like proton-cachyos, proton-ge, etc.)
+        proton_commands = [
+            "proton",           # System proton in PATH
+            "proton-cachyos",   # CachyOS proton
+            "proton-ge",        # GE-Proton standalone
+        ]
+        
+        for cmd in proton_commands:
+            if shutil.which(cmd):
+                self._log(f"[SCAN] Found system Proton: {cmd}", "#74c0fc")
+                return cmd
+        
+        # Check common proton installation paths
+        proton_paths = [
+            Path.home() / ".local/share/Steam/compatibilitytools.d",
+            Path.home() / ".steam/steam/compatibilitytools.d",
+            Path("/usr/share/steam/compatibilitytools.d"),
+        ]
+        
+        for base_path in proton_paths:
+            if base_path.exists():
+                try:
+                    for proton_dir in base_path.iterdir():
+                        if proton_dir.is_dir():
+                            proton_bin = proton_dir / "proton"
+                            if proton_bin.exists():
+                                self._log(f"[SCAN] Found Proton at: {proton_bin}", "#74c0fc")
+                                return str(proton_bin)
+                except PermissionError:
+                    pass
+        
+        self._log(f"[--] No Proton installation found", "#888888")
+        return None
+    
     def _launch_via_steam(self):
         """Launch via Steam - cross-platform."""
         import platform
@@ -511,9 +549,37 @@ class GameLaunchDialog(QDialog):
                 
             else:  # Linux
                 if is_windows:
-                    # Try wine
-                    if shutil.which("wine"):
-                        self._log(f"[INFO] Using Wine to run Windows executable", "#74c0fc")
+                    # Check for Proton first (better compatibility than wine)
+                    proton_cmd = self._find_proton()
+                    if proton_cmd:
+                        self._log(f"[OK] Found Proton: {proton_cmd}", "#69db7c")
+                        self._log(f"[INFO] Launching with Proton...", "#74c0fc")
+                        
+                        env = os.environ.copy()
+                        # Set STEAM_COMPAT_DATA_PATH for Proton prefix
+                        if self.installation.proton_prefix:
+                            env["STEAM_COMPAT_DATA_PATH"] = str(self.installation.proton_prefix.parent)
+                            env["WINEPREFIX"] = str(self.installation.proton_prefix)
+                            self._log(f"[INFO] Prefix: {self.installation.proton_prefix}", "#74c0fc")
+                        else:
+                            # Create default prefix path
+                            default_prefix = Path.home() / ".proton" / "rimworld"
+                            default_prefix.mkdir(parents=True, exist_ok=True)
+                            env["STEAM_COMPAT_DATA_PATH"] = str(default_prefix)
+                            self._log(f"[INFO] Using default prefix: {default_prefix}", "#74c0fc")
+                        
+                        subprocess.Popen(
+                            [proton_cmd, "run", str(exe_path)],
+                            cwd=str(game_path),
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL,
+                            env=env
+                        )
+                        self._log(f"[OK] Game started with Proton!", "#69db7c")
+                        self.status_label.setText("✅ Launched with Proton!")
+                    elif shutil.which("wine"):
+                        # Fallback to wine
+                        self._log(f"[INFO] Proton not found, using Wine...", "#74c0fc")
                         
                         env = os.environ.copy()
                         if self.installation.proton_prefix:
@@ -530,8 +596,9 @@ class GameLaunchDialog(QDialog):
                         self._log(f"[OK] Game started with Wine!", "#69db7c")
                         self.status_label.setText("✅ Launched with Wine!")
                     else:
-                        self._log(f"[ERROR] Wine not found! Install wine to run Windows games.", "#ff6b6b")
-                        self.status_label.setText("❌ Wine not installed")
+                        self._log(f"[ERROR] No Proton or Wine found!", "#ff6b6b")
+                        self._log(f"[TIP] Install proton or wine to run Windows games", "#ffd43b")
+                        self.status_label.setText("❌ Proton/Wine not installed")
                 else:
                     # Native Linux
                     self._log(f"[INFO] Running native Linux executable", "#74c0fc")
