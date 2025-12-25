@@ -526,9 +526,16 @@ class DownloadLogWidget(QWidget):
         self._worker.item_complete.connect(self._on_item_complete)
         self._worker.item_failed.connect(self._on_item_failed)
         self._worker.all_complete.connect(self._on_all_complete)
+        self._worker.finished.connect(self._cleanup_worker)  # Clean up when done
         self._worker.start()
         
         self._log_info("Download manager started...")
+    
+    def _cleanup_worker(self):
+        """Clean up finished worker to prevent memory leak."""
+        if self._worker:
+            self._worker.deleteLater()
+            self._worker = None
     
     def _fetch_mod_names(self, workshop_ids: list[str]) -> dict[str, str]:
         """Fetch mod names from Steam Workshop API."""

@@ -4,6 +4,7 @@ Integrated Steam Workshop browser with subscription and download features.
 """
 
 import re
+import threading
 from pathlib import Path
 from typing import Optional
 from dataclasses import dataclass, field
@@ -72,6 +73,7 @@ class WorkshopBrowser(QWidget):
         self.downloaded_ids = downloaded_ids or set()
         self.queue: list[WorkshopItem] = []
         self.queue_ids: set[str] = set()
+        self._queue_lock = threading.Lock()  # Thread safety for queue operations
         
         self._setup_ui()
     
@@ -337,37 +339,38 @@ class WorkshopBrowser(QWidget):
         return None
     
     def _add_to_queue(self, workshop_id: str, name: str = ""):
-        """Add a mod to the download queue."""
-        # Check for duplicates
-        if workshop_id in self.queue_ids:
-            self.status_label.setText(f"Mod {workshop_id} already in queue")
-            return False
-        
-        # Check if already downloaded
-        if self.dup_check.isChecked() and workshop_id in self.downloaded_ids:
-            self.status_label.setText(f"Mod {workshop_id} already downloaded (skipped)")
-            return False
-        
-        # Fetch mod name from Steam API if not provided
-        if not name or name == f"Workshop Mod {workshop_id}":
-            name = self._fetch_mod_name(workshop_id) or f"Workshop Mod {workshop_id}"
-        
-        item = WorkshopItem(
-            workshop_id=workshop_id,
-            name=name
-        )
-        
-        self.queue.append(item)
-        self.queue_ids.add(workshop_id)
-        
-        list_item = DownloadQueueItem(item)
-        self.queue_list.addItem(list_item)
-        
-        self._update_queue_count()
-        self.status_label.setText(f"Added: {name}")
-        self.mod_added.emit(workshop_id, name)
-        
-        return True
+        """Add a mod to the download queue (thread-safe)."""
+        with self._queue_lock:
+            # Check for duplicates
+            if workshop_id in self.queue_ids:
+                self.status_label.setText(f"Mod {workshop_id} already in queue")
+                return False
+            
+            # Check if already downloaded
+            if self.dup_check.isChecked() and workshop_id in self.downloaded_ids:
+                self.status_label.setText(f"Mod {workshop_id} already downloaded (skipped)")
+                return False
+            
+            # Fetch mod name from Steam API if not provided
+            if not name or name == f"Workshop Mod {workshop_id}":
+                name = self._fetch_mod_name(workshop_id) or f"Workshop Mod {workshop_id}"
+            
+            item = WorkshopItem(
+                workshop_id=workshop_id,
+                name=name
+            )
+            
+            self.queue.append(item)
+            self.queue_ids.add(workshop_id)
+            
+            list_item = DownloadQueueItem(item)
+            self.queue_list.addItem(list_item)
+            
+            self._update_queue_count()
+            self.status_label.setText(f"Added: {name}")
+            self.mod_added.emit(workshop_id, name)
+            
+            return True
     
     def _fetch_mod_name(self, workshop_id: str) -> Optional[str]:
         """Fetch mod name from Steam Workshop API."""
@@ -537,22 +540,24 @@ class WorkshopBrowser(QWidget):
             self.status_label.setText(f"Failed to parse collection: {e}")
     
     def _remove_selected(self):
-        """Remove selected items from queue."""
-        for item in self.queue_list.selectedItems():
-            if isinstance(item, DownloadQueueItem):
-                self.queue_ids.discard(item.workshop_item.workshop_id)
-                self.queue = [q for q in self.queue if q.workshop_id != item.workshop_item.workshop_id]
-            self.queue_list.takeItem(self.queue_list.row(item))
-        
-        self._update_queue_count()
+        """Remove selected items from queue (thread-safe)."""
+        with self._queue_lock:
+            for item in self.queue_list.selectedItems():
+                if isinstance(item, DownloadQueueItem):
+                    self.queue_ids.discard(item.workshop_item.workshop_id)
+                    self.queue = [q for q in self.queue if q.workshop_id != item.workshop_item.workshop_id]
+                self.queue_list.takeItem(self.queue_list.row(item))
+            
+            self._update_queue_count()
     
     def _clear_queue(self):
-        """Clear the entire queue."""
-        self.queue.clear()
-        self.queue_ids.clear()
-        self.queue_list.clear()
-        self._update_queue_count()
-        self.status_label.setText("Queue cleared")
+        """Clear the entire queue (thread-safe)."""
+        with self._queue_lock:
+            self.queue.clear()
+            self.queue_ids.clear()
+            self.queue_list.clear()
+            self._update_queue_count()
+            self.status_label.setText("Queue cleared")
     
     def _update_queue_count(self):
         """Update the queue count display."""
@@ -593,26 +598,26 @@ class WorkshopBrowser(QWidget):
                     item.update_display("✓ Downloaded")
     
     def clear_completed(self):
-        """Remove all completed/downloaded items from queue."""
-        items_to_remove = []
-        for i in range(self.queue_list.count()):
-            item = self.queue_list.item(i)
-            if isinstance(item, DownloadQueueItem):
-                wid = item.workshop_item.workshop_id
-                if wid in self.downloaded_ids:
-                    items_to_remove.append(i)
-        
-        # Remove in reverse order to avoid index shifting
-        for i in reversed(items_to_remove):
-            item = self.queue_list.item(i)
-            if isinstance(item, DownloadQueueItem):
-                self.queue_ids.discard(item.workshop_item.workshop_id)
-                self.queue = [q for q in self.queue if q.workshop_id != item.workshop_item.workshop_id]
-            self.queue_list.takeItem(i)
-        
-        self._update_queue_count()
-        if items_to_remove:
-            self.status_label.setText(f"Cleared {len(items_to_remove)} downloaded item(s)")
+        """Remove all completed/downloaded items from queue (thread-safe)."""
+        with self._queue_lock:
+            # Build list of indices to remove
+            items_to_remove = []
+            for i in range(self.queue_list.count()):
+                item = self.queue_list.item(i)
+                if isinstance(item, DownloadQueueItem):
+                    wid = item.workshop_item.workshop_id
+                    if wid in self.downloaded_ids:
+                        items_to_remove.append((i, wid))
+            
+            # Remove in reverse order to avoid index shifting
+            for i, wid in reversed(items_to_remove):
+                self.queue_ids.discard(wid)
+                self.queue = [q for q in self.queue if q.workshop_id != wid]
+                self.queue_list.takeItem(i)
+            
+            self._update_queue_count()
+            if items_to_remove:
+                self.status_label.setText(f"Cleared {len(items_to_remove)} downloaded item(s)")
     
     def show_progress(self, current: int, total: int, status: str = ""):
         """Show download progress."""

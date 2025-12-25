@@ -166,14 +166,34 @@ class ConfigHandler:
     
     def save(self) -> bool:
         """
-        Save configuration to file.
+        Save configuration to file using atomic write.
         Returns True if saved successfully, False otherwise.
         """
+        import tempfile
+        
         try:
-            with open(self._config_file, 'w', encoding='utf-8') as f:
-                json.dump(asdict(self._config), f, indent=2)
-            return True
-        except (IOError, PermissionError) as e:
+            # Write to temp file first, then atomic rename
+            fd, temp_path = tempfile.mkstemp(
+                suffix='.json',
+                prefix='config_',
+                dir=self._config_dir
+            )
+            try:
+                with os.fdopen(fd, 'w', encoding='utf-8') as f:
+                    json.dump(asdict(self._config), f, indent=2)
+                
+                # Atomic rename (works on POSIX, best-effort on Windows)
+                temp_file = Path(temp_path)
+                temp_file.replace(self._config_file)
+                return True
+            except Exception:
+                # Clean up temp file on error
+                try:
+                    os.unlink(temp_path)
+                except OSError:
+                    pass
+                raise
+        except (IOError, PermissionError, OSError) as e:
             print(f"Error: Failed to save config: {e}")
             return False
     
@@ -233,19 +253,39 @@ class ConfigHandler:
         Save a modlist to the modlists directory.
         Returns the path to the saved file.
         """
+        import tempfile
+        
         modlist_data = {
             "name": name,
             "mod_ids": mod_ids,
             "active_mods": active_mods
         }
         
-        # Sanitize filename
+        # Sanitize filename - prevent path traversal
         safe_name = "".join(c for c in name if c.isalnum() or c in "._- ")
+        safe_name = safe_name.replace("..", "_")  # Prevent path traversal
+        if not safe_name:
+            safe_name = "unnamed_modlist"
         filename = f"{safe_name}.json"
         filepath = self._modlists_dir / filename
         
-        with open(filepath, 'w', encoding='utf-8') as f:
-            json.dump(modlist_data, f, indent=2)
+        # Atomic write
+        try:
+            fd, temp_path = tempfile.mkstemp(
+                suffix='.json',
+                prefix='modlist_',
+                dir=self._modlists_dir
+            )
+            with os.fdopen(fd, 'w', encoding='utf-8') as f:
+                json.dump(modlist_data, f, indent=2)
+            
+            Path(temp_path).replace(filepath)
+        except Exception:
+            try:
+                os.unlink(temp_path)
+            except (OSError, NameError):
+                pass
+            raise
         
         return filepath
     
