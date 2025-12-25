@@ -42,6 +42,9 @@ class AppConfig:
     
     # Dark mode preference (None = system, True = dark, False = light)
     dark_mode: Optional[bool] = None
+    
+    # Active mods list (package IDs in load order) - per installation
+    active_mods: dict[str, list[str]] = field(default_factory=dict)
 
 
 class ConfigHandler:
@@ -214,3 +217,26 @@ class ConfigHandler:
     def list_modlists(self) -> list[Path]:
         """List all saved modlists."""
         return list(self._modlists_dir.glob("*.json"))
+    
+    def save_active_mods(self, installation_path: str, mod_ids: list[str]) -> None:
+        """
+        Save active mods list for a specific installation.
+        
+        Args:
+            installation_path: Path to the RimWorld installation
+            mod_ids: List of package IDs in load order
+        """
+        self._config.active_mods[installation_path] = mod_ids
+        self.save()
+    
+    def get_active_mods(self, installation_path: str) -> list[str]:
+        """
+        Get saved active mods list for a specific installation.
+        
+        Args:
+            installation_path: Path to the RimWorld installation
+            
+        Returns:
+            List of package IDs in load order, or empty list if none saved
+        """
+        return self._config.active_mods.get(installation_path, [])

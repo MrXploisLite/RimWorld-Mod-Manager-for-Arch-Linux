@@ -878,9 +878,18 @@ class MainWindow(QMainWindow):
         
         self.all_mods = unique_mods
         
-        # Determine active mods (those symlinked in Mods folder)
+        # Determine active mods - first try from saved config, then fall back to symlinks
         active_ids = set()
-        if self.installer:
+        saved_active_ids = []
+        
+        if self.current_installation:
+            saved_active_ids = self.config.get_active_mods(str(self.current_installation.path))
+        
+        if saved_active_ids:
+            # Use saved config (preserves load order)
+            active_ids = set(pid.lower() for pid in saved_active_ids)
+        elif self.installer:
+            # Fall back to reading symlinks (for first run or migration)
             for target in self.installer.get_installed_mods():
                 mod = self.mod_parser.get_mod_by_path(target)
                 if mod:
@@ -890,10 +899,23 @@ class MainWindow(QMainWindow):
         self.active_mods = []
         self.inactive_mods = []
         
+        # Build a map for ordering
+        mod_by_id = {mod.package_id.lower(): mod for mod in self.all_mods}
+        
+        # If we have saved order, use it
+        if saved_active_ids:
+            for pid in saved_active_ids:
+                mod = mod_by_id.get(pid.lower())
+                if mod:
+                    mod.is_active = True
+                    self.active_mods.append(mod)
+        
+        # Add any remaining mods
         for mod in self.all_mods:
             if mod.package_id.lower() in active_ids:
-                mod.is_active = True
-                self.active_mods.append(mod)
+                if mod not in self.active_mods:
+                    mod.is_active = True
+                    self.active_mods.append(mod)
             else:
                 mod.is_active = False
                 self.inactive_mods.append(mod)
@@ -1048,6 +1070,11 @@ class MainWindow(QMainWindow):
         success = sum(1 for v in results.values() if v)
         failed = len(results) - success
         
+        # Save active mods to config (by package_id in load order)
+        if self.current_installation:
+            active_ids = [mod.package_id for mod in active_mods]
+            self.config.save_active_mods(str(self.current_installation.path), active_ids)
+        
         if failed > 0:
             self.status_bar.showMessage(f"Applied {success} mods, {failed} failed")
             QMessageBox.warning(
@@ -1106,18 +1133,27 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Error", "Failed to load modlist")
             return
         
-        # Apply the modlist
-        active_ids = set(pid.lower() for pid in data.get("active_mods", []))
+        # Apply the modlist - preserve saved order
+        active_ids_list = data.get("active_mods", [])
+        active_ids_set = set(pid.lower() for pid in active_ids_list)
+        
+        # Build mod lookup
+        mod_by_id = {mod.package_id.lower(): mod for mod in self.all_mods}
         
         # Reorganize mods
         self.available_list.clear_mods()
         self.active_list.clear_mods()
         
-        for mod in self.all_mods:
-            if mod.package_id.lower() in active_ids:
+        # Add active mods in saved order
+        for pid in active_ids_list:
+            mod = mod_by_id.get(pid.lower())
+            if mod:
                 mod.is_active = True
                 self.active_list.add_mod(mod)
-            else:
+        
+        # Add remaining mods to available list
+        for mod in self.all_mods:
+            if mod.package_id.lower() not in active_ids_set:
                 mod.is_active = False
                 self.available_list.add_mod(mod)
         

@@ -335,6 +335,13 @@ class WorkshopBrowser(QWidget):
             match = re.search(pattern, url)
             if match:
                 return match.group(1)
+        return None$',
+        ]
+        
+        for pattern in patterns:
+            match = re.search(pattern, url)
+            if match:
+                return match.group(1)
         return None
     
     def _add_to_queue(self, workshop_id: str, name: str = ""):

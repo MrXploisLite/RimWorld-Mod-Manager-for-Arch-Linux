@@ -427,8 +427,10 @@ class ModParser:
     def sort_by_load_order(self, mods: list[ModInfo]) -> list[ModInfo]:
         """
         Sort mods respecting loadBefore and loadAfter rules.
-        Uses topological sort.
+        Uses topological sort with Kahn's algorithm.
         """
+        from collections import deque
+        
         if not mods:
             return []
         
@@ -456,20 +458,26 @@ class ModParser:
                     graph[mod_id].append(before_id)
                     in_degree[before_id] += 1
         
-        # Kahn's algorithm for topological sort
-        queue = [m for m in in_degree if in_degree[m] == 0]
+        # Kahn's algorithm with deque for O(1) popleft
+        # Sort initial queue once for deterministic order
+        queue = deque(sorted([m for m in in_degree if in_degree[m] == 0]))
         result = []
         
         while queue:
-            # Sort queue for deterministic order
-            queue.sort()
-            node = queue.pop(0)
+            node = queue.popleft()
             result.append(mod_dict[node])
             
+            # Collect new nodes with zero in-degree
+            new_nodes = []
             for neighbor in graph[node]:
                 in_degree[neighbor] -= 1
                 if in_degree[neighbor] == 0:
-                    queue.append(neighbor)
+                    new_nodes.append(neighbor)
+            
+            # Sort and extend for deterministic order
+            if new_nodes:
+                new_nodes.sort()
+                queue.extend(new_nodes)
         
         # If there's a cycle, return original order for remaining mods
         if len(result) != len(mods):
