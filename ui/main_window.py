@@ -268,6 +268,131 @@ class WorkshopDialog(QDialog):
         self.accept()
 
 
+class SettingsDialog(QDialog):
+    """Dialog for application settings."""
+    
+    def __init__(self, config: ConfigHandler, parent=None):
+        super().__init__(parent)
+        self.config = config
+        self.setWindowTitle("Settings")
+        self.setMinimumSize(500, 400)
+        
+        self._setup_ui()
+        self._load_settings()
+    
+    def _setup_ui(self):
+        layout = QVBoxLayout(self)
+        
+        # Workshop download path
+        workshop_group = QGroupBox("Workshop Downloads")
+        workshop_layout = QVBoxLayout(workshop_group)
+        
+        path_layout = QHBoxLayout()
+        path_layout.addWidget(QLabel("Download Path:"))
+        self.workshop_path_edit = QLineEdit()
+        self.workshop_path_edit.setPlaceholderText("~/RimWorld_Workshop_Mods")
+        path_layout.addWidget(self.workshop_path_edit, 1)
+        
+        self.btn_browse_workshop = QPushButton("Browse...")
+        self.btn_browse_workshop.clicked.connect(self._browse_workshop_path)
+        path_layout.addWidget(self.btn_browse_workshop)
+        workshop_layout.addLayout(path_layout)
+        
+        layout.addWidget(workshop_group)
+        
+        # SteamCMD settings
+        steamcmd_group = QGroupBox("SteamCMD")
+        steamcmd_layout = QVBoxLayout(steamcmd_group)
+        
+        steamcmd_path_layout = QHBoxLayout()
+        steamcmd_path_layout.addWidget(QLabel("SteamCMD Path:"))
+        self.steamcmd_path_edit = QLineEdit()
+        self.steamcmd_path_edit.setPlaceholderText("Auto-detect (leave empty)")
+        steamcmd_path_layout.addWidget(self.steamcmd_path_edit, 1)
+        
+        self.btn_browse_steamcmd = QPushButton("Browse...")
+        self.btn_browse_steamcmd.clicked.connect(self._browse_steamcmd_path)
+        steamcmd_path_layout.addWidget(self.btn_browse_steamcmd)
+        steamcmd_layout.addLayout(steamcmd_path_layout)
+        
+        layout.addWidget(steamcmd_group)
+        
+        # UI Settings
+        ui_group = QGroupBox("User Interface")
+        ui_layout = QVBoxLayout(ui_group)
+        
+        from PyQt6.QtWidgets import QCheckBox
+        self.auto_refresh_check = QCheckBox("Auto-refresh mod list after downloads")
+        self.auto_refresh_check.setChecked(True)
+        ui_layout.addWidget(self.auto_refresh_check)
+        
+        self.auto_add_path_check = QCheckBox("Auto-add download path to mod sources")
+        self.auto_add_path_check.setChecked(True)
+        ui_layout.addWidget(self.auto_add_path_check)
+        
+        layout.addWidget(ui_group)
+        
+        # Config file location info
+        info_group = QGroupBox("Configuration")
+        info_layout = QVBoxLayout(info_group)
+        
+        config_path = str(self.config.config_dir / "config.json")
+        info_label = QLabel(f"Config file: <code>{config_path}</code>")
+        info_label.setTextFormat(Qt.TextFormat.RichText)
+        info_label.setWordWrap(True)
+        info_layout.addWidget(info_label)
+        
+        self.btn_open_config_dir = QPushButton("📂 Open Config Folder")
+        self.btn_open_config_dir.clicked.connect(self._open_config_dir)
+        info_layout.addWidget(self.btn_open_config_dir)
+        
+        layout.addWidget(info_group)
+        
+        layout.addStretch()
+        
+        # Dialog buttons
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Save | 
+            QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(self._save_settings)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+    
+    def _load_settings(self):
+        """Load current settings into the dialog."""
+        self.workshop_path_edit.setText(self.config.config.workshop_download_path)
+        self.steamcmd_path_edit.setText(self.config.config.steamcmd_path)
+    
+    def _save_settings(self):
+        """Save settings and close dialog."""
+        self.config.config.workshop_download_path = self.workshop_path_edit.text()
+        self.config.config.steamcmd_path = self.steamcmd_path_edit.text()
+        self.config.save()
+        self.accept()
+    
+    def _browse_workshop_path(self):
+        path = QFileDialog.getExistingDirectory(
+            self, "Select Workshop Download Directory",
+            str(Path.home())
+        )
+        if path:
+            self.workshop_path_edit.setText(path)
+    
+    def _browse_steamcmd_path(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Select SteamCMD Executable",
+            "/usr/bin",
+            "Executables (*)"
+        )
+        if path:
+            self.steamcmd_path_edit.setText(path)
+    
+    def _open_config_dir(self):
+        import subprocess
+        subprocess.run(["xdg-open", str(self.config.config_dir)], check=False)
+
+
 class MainWindow(QMainWindow):
     """Main application window."""
     
@@ -519,10 +644,29 @@ class MainWindow(QMainWindow):
         
         file_menu.addSeparator()
         
+        # Save/Export current config
+        export_config_action = QAction("Export Config...", self)
+        export_config_action.triggered.connect(self._export_config)
+        file_menu.addAction(export_config_action)
+        
+        import_config_action = QAction("Import Config...", self)
+        import_config_action.triggered.connect(self._import_config)
+        file_menu.addAction(import_config_action)
+        
+        file_menu.addSeparator()
+        
         exit_action = QAction("Exit", self)
         exit_action.setShortcut("Ctrl+Q")
         exit_action.triggered.connect(self.close)
         file_menu.addAction(exit_action)
+        
+        # Edit menu
+        edit_menu = menubar.addMenu("Edit")
+        
+        settings_action = QAction("Settings...", self)
+        settings_action.setShortcut("Ctrl+,")
+        settings_action.triggered.connect(self._show_settings)
+        edit_menu.addAction(settings_action)
         
         # Tools menu
         tools_menu = menubar.addMenu("Tools")
@@ -1213,6 +1357,85 @@ class MainWindow(QMainWindow):
             "</ul>"
             "<p>Version 1.0.0</p>"
         )
+    
+    def _show_settings(self):
+        """Show settings dialog."""
+        dialog = SettingsDialog(self.config, self)
+        if dialog.exec():
+            self.status_bar.showMessage("Settings saved")
+            # Refresh downloader with new settings
+            if self.downloader:
+                workshop_path = self.config.get_default_workshop_path()
+                self.downloader.download_path = workshop_path
+                if self.config.config.steamcmd_path:
+                    self.downloader.steamcmd_path = self.config.config.steamcmd_path
+    
+    def _export_config(self):
+        """Export current configuration to a file."""
+        filepath, _ = QFileDialog.getSaveFileName(
+            self, "Export Configuration",
+            str(Path.home() / "rimworld-mod-manager-config.json"),
+            "JSON Files (*.json)"
+        )
+        if filepath:
+            import json
+            import shutil
+            
+            # Copy current config
+            try:
+                config_data = {
+                    "last_installation": self.config.config.last_installation,
+                    "mod_source_paths": self.config.config.mod_source_paths,
+                    "custom_game_paths": self.config.config.custom_game_paths,
+                    "workshop_download_path": self.config.config.workshop_download_path,
+                    "steamcmd_path": self.config.config.steamcmd_path,
+                }
+                
+                with open(filepath, 'w', encoding='utf-8') as f:
+                    json.dump(config_data, f, indent=2)
+                
+                self.status_bar.showMessage(f"Config exported to {filepath}")
+                QMessageBox.information(self, "Export Successful", f"Configuration exported to:\n{filepath}")
+            except Exception as e:
+                QMessageBox.warning(self, "Export Failed", f"Failed to export config:\n{e}")
+    
+    def _import_config(self):
+        """Import configuration from a file."""
+        filepath, _ = QFileDialog.getOpenFileName(
+            self, "Import Configuration",
+            str(Path.home()),
+            "JSON Files (*.json)"
+        )
+        if filepath:
+            import json
+            
+            try:
+                with open(filepath, 'r', encoding='utf-8') as f:
+                    config_data = json.load(f)
+                
+                # Apply imported settings
+                if "mod_source_paths" in config_data:
+                    self.config.config.mod_source_paths = config_data["mod_source_paths"]
+                if "custom_game_paths" in config_data:
+                    self.config.config.custom_game_paths = config_data["custom_game_paths"]
+                if "workshop_download_path" in config_data:
+                    self.config.config.workshop_download_path = config_data["workshop_download_path"]
+                if "steamcmd_path" in config_data:
+                    self.config.config.steamcmd_path = config_data["steamcmd_path"]
+                
+                self.config.save()
+                
+                self.status_bar.showMessage("Config imported successfully")
+                QMessageBox.information(
+                    self, "Import Successful", 
+                    "Configuration imported successfully.\n\nPlease restart the application for all changes to take effect."
+                )
+                
+                # Refresh installations
+                self._detect_installations()
+                
+            except Exception as e:
+                QMessageBox.warning(self, "Import Failed", f"Failed to import config:\n{e}")
     
     def closeEvent(self, event):
         """Handle window close event."""
