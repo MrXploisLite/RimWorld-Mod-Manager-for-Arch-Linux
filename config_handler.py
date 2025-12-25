@@ -7,12 +7,16 @@ Cross-platform configuration storage.
 """
 
 import json
+import logging
 import os
 import sys
 import platform
 from pathlib import Path
 from typing import Any, Optional
 from dataclasses import dataclass, field, asdict
+
+# Module logger
+log = logging.getLogger("rimmodmanager.config")
 
 
 def get_platform() -> str:
@@ -144,7 +148,7 @@ class ConfigHandler:
             
             # Validate data is a dict
             if not isinstance(data, dict):
-                print("Warning: Config file is not a valid JSON object")
+                log.warning("Config file is not a valid JSON object")
                 return False
             
             # Update config with loaded values, keeping defaults for missing keys
@@ -161,7 +165,7 @@ class ConfigHandler:
             
             return True
         except (json.JSONDecodeError, IOError, PermissionError, TypeError) as e:
-            print(f"Warning: Failed to load config: {e}")
+            log.warning(f"Failed to load config: {e}")
             return False
     
     def save(self) -> bool:
@@ -194,7 +198,7 @@ class ConfigHandler:
                     pass
                 raise
         except (IOError, PermissionError, OSError) as e:
-            print(f"Error: Failed to save config: {e}")
+            log.error(f"Failed to save config: {e}")
             return False
     
     def get(self, key: str, default: Any = None) -> Any:
@@ -295,7 +299,7 @@ class ConfigHandler:
             with open(filepath, 'r', encoding='utf-8') as f:
                 return json.load(f)
         except (json.JSONDecodeError, IOError) as e:
-            print(f"Failed to load modlist: {e}")
+            log.warning(f"Failed to load modlist: {e}")
             return None
     
     def list_modlists(self) -> list[Path]:

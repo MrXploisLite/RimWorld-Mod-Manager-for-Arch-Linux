@@ -85,6 +85,13 @@ def main():
     # Set up environment
     setup_environment()
     
+    # Set up logging
+    from logger import setup_logging
+    from config_handler import ConfigHandler
+    config = ConfigHandler()
+    logger = setup_logging(config.config_dir, debug="--debug" in sys.argv)
+    logger.info("RimModManager starting...")
+    
     # Import after dependency check
     from PyQt6.QtWidgets import QApplication
     from PyQt6.QtCore import Qt

@@ -6,12 +6,16 @@ Cross-platform RimWorld installation detection:
 - Linux: Steam native, Proton, Flatpak, Wine, standalone
 """
 
+import logging
 import os
 import platform
 from pathlib import Path
 from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
+
+# Module logger
+log = logging.getLogger("rimmodmanager.game_detector")
 
 
 def get_platform() -> str:

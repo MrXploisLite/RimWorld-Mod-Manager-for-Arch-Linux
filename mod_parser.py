@@ -7,12 +7,16 @@ Includes ModsConfig.xml parsing and profile management.
 import os
 import re
 import json
+import logging
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Optional
 from enum import Enum
 from datetime import datetime
+
+# Module logger
+log = logging.getLogger("rimmodmanager.mod_parser")
 
 
 class ModSource(Enum):
@@ -596,7 +600,7 @@ class ProfileManager:
                 profile = ModProfile.from_dict(data)
                 self.profiles[profile.name] = profile
             except (json.JSONDecodeError, IOError) as e:
-                print(f"Failed to load profile {file}: {e}")
+                log.warning(f"Failed to load profile {file}: {e}")
     
     def save_profile(self, profile: ModProfile) -> bool:
         """Save a profile to disk."""
@@ -612,7 +616,7 @@ class ProfileManager:
             self.profiles[profile.name] = profile
             return True
         except IOError as e:
-            print(f"Failed to save profile: {e}")
+            log.error(f"Failed to save profile: {e}")
             return False
     
     def delete_profile(self, name: str) -> bool:
@@ -629,7 +633,7 @@ class ProfileManager:
             del self.profiles[name]
             return True
         except (IOError, KeyError) as e:
-            print(f"Failed to delete profile: {e}")
+            log.error(f"Failed to delete profile: {e}")
             return False
     
     def get_profile(self, name: str) -> Optional[ModProfile]:
@@ -728,7 +732,7 @@ class ModsConfigParser:
             return active_mods, game_version, known_expansions
             
         except (ET.ParseError, IOError) as e:
-            print(f"Failed to parse ModsConfig.xml: {e}")
+            log.error(f"Failed to parse ModsConfig.xml: {e}")
             return [], "", []
     
     def write_mods_config(self, config_path: Path, active_mods: list[str], 
@@ -758,7 +762,7 @@ class ModsConfigParser:
         try:
             config_path.mkdir(parents=True, exist_ok=True)
         except (IOError, PermissionError) as e:
-            print(f"[ModsConfig] Failed to create directory: {e}")
+            log.error(f"Failed to create config directory: {e}")
             return False
         
         mods_config = config_path / "ModsConfig.xml"
@@ -784,7 +788,7 @@ class ModsConfigParser:
             lower = mod_id.lower()
             # Skip DLC and Core - game loads them from Data folder
             if lower in EXCLUDED_IDS:
-                print(f"[ModsConfig] Skipping DLC/Core: {mod_id}")
+                log.debug(f"Skipping DLC/Core: {mod_id}")
                 continue
             if lower not in seen:
                 seen.add(lower)
@@ -822,8 +826,8 @@ class ModsConfigParser:
         final_mods.extend(active_dlcs)  # DLCs in order
         final_mods.extend(other_mods)  # Other mods last
         
-        print(f"[ModsConfig] Input mods: {len(active_mods)}, After filter: {len(final_mods)}")
-        print(f"[ModsConfig] Final order: {final_mods}")
+        log.info(f"ModsConfig: {len(active_mods)} input -> {len(final_mods)} output mods")
+        log.debug(f"ModsConfig final order: {final_mods}")
         
         # Backup existing
         if mods_config.exists():
@@ -889,15 +893,12 @@ class ModsConfigParser:
                 f.flush()
                 os.fsync(f.fileno())
             
-            print(f"[ModsConfig] Written to: {mods_config}")
-            print(f"[ModsConfig] Mods count: {len(filtered_mods)}")
+            log.info(f"ModsConfig written: {mods_config} ({len(filtered_mods)} mods)")
             
             return True
             
         except Exception as e:
-            print(f"[ModsConfig] Write failed: {e}")
-            import traceback
-            traceback.print_exc()
+            log.error(f"ModsConfig write failed: {e}", exc_info=True)
             return False
 
 
@@ -961,7 +962,7 @@ class BackupManager:
             with open(index_file, 'w', encoding='utf-8') as f:
                 json.dump({"backups": [b.to_dict() for b in self.backups]}, f, indent=2)
         except IOError as e:
-            print(f"Failed to save backup index: {e}")
+            log.error(f"Failed to save backup index: {e}")
     
     def create_backup(self, active_mods: list[str], name: str = "", 
                       description: str = "", auto: bool = False) -> ModBackup:
@@ -1118,13 +1119,13 @@ class ModUpdateChecker:
                             'creator': item.get('creator', ''),
                         }
         except urllib.error.URLError as e:
-            print(f"Network error fetching Workshop info: {e}")
+            log.debug(f"Network error fetching Workshop info: {e}")
         except urllib.error.HTTPError as e:
-            print(f"HTTP error fetching Workshop info: {e.code}")
+            log.debug(f"HTTP error fetching Workshop info: {e.code}")
         except (json.JSONDecodeError, KeyError, TypeError) as e:
-            print(f"Failed to parse Workshop response: {e}")
+            log.debug(f"Failed to parse Workshop response: {e}")
         except OSError as e:
-            print(f"OS error fetching Workshop info: {e}")
+            log.debug(f"OS error fetching Workshop info: {e}")
         
         return results
     
@@ -1286,13 +1287,13 @@ class EnhancedModInfoFetcher:
                             )
                             self.cache[wid] = info
             except urllib.error.URLError as e:
-                print(f"Network error fetching enhanced mod info: {e}")
+                log.debug(f"Network error fetching enhanced mod info: {e}")
             except urllib.error.HTTPError as e:
-                print(f"HTTP error fetching enhanced mod info: {e.code}")
+                log.debug(f"HTTP error fetching enhanced mod info: {e.code}")
             except (json.JSONDecodeError, KeyError, TypeError) as e:
-                print(f"Failed to parse enhanced mod info response: {e}")
+                log.debug(f"Failed to parse enhanced mod info response: {e}")
             except OSError as e:
-                print(f"OS error fetching enhanced mod info: {e}")
+                log.debug(f"OS error fetching enhanced mod info: {e}")
         
         # Return requested items from cache
         return {wid: self.cache[wid] for wid in workshop_ids if wid in self.cache}

@@ -3,6 +3,7 @@ Main Window for RimModManager
 The primary application window with all mod management features.
 """
 
+import logging
 import os
 import shutil
 import subprocess
@@ -29,6 +30,9 @@ from ui.mod_widgets import (
 )
 from ui.workshop_browser import WorkshopBrowser, WorkshopDownloadDialog
 from ui.download_manager import DownloadLogWidget, SteamCMDChecker, LiveDownloadWorker
+
+# Module logger
+log = logging.getLogger("rimmodmanager.ui.main_window")
 
 
 class ScanWorker(QThread):
@@ -1263,7 +1267,7 @@ class MainWindow(QMainWindow):
             use_copy = install.is_windows_build and install.proton_prefix is not None
             self.installer = ModInstaller(mods_folder, use_copy=use_copy)
             if use_copy:
-                print(f"[ModInstaller] Using copy mode for Proton/Wine compatibility")
+                log.info(f"ModInstaller using copy mode for Proton/Wine compatibility")
             
             # Set up downloader
             workshop_path = self.config.get_default_workshop_path()
@@ -1318,9 +1322,9 @@ class MainWindow(QMainWindow):
                             # Re-detect config paths with the new prefix
                             self.game_detector._detect_save_config_paths(install)
                             if install.config_path:
-                                print(f"[DEBUG] Config path found: {install.config_path}")
+                                log.debug(f"Config path found: {install.config_path}")
                             else:
-                                print(f"[DEBUG] Config path still not found after setting prefix")
+                                log.debug(f"Config path still not found after setting prefix")
                 
                 self._detect_installations()
                 # Select the new installation

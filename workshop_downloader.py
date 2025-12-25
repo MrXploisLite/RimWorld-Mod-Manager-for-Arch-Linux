@@ -8,12 +8,16 @@ import re
 import shutil
 import subprocess
 import tempfile
+import logging
 from pathlib import Path
 from dataclasses import dataclass
 from typing import Optional, Callable
 from enum import Enum
 import threading
 import queue
+
+# Module logger
+log = logging.getLogger("rimmodmanager.workshop")
 
 
 class DownloadStatus(Enum):
@@ -424,13 +428,13 @@ After installation, restart this application.
             return unique_ids
             
         except urllib.error.URLError as e:
-            print(f"Network error parsing collection: {e}")
+            log.warning(f"Network error parsing collection: {e}")
             return []
         except urllib.error.HTTPError as e:
-            print(f"HTTP error parsing collection: {e.code}")
+            log.warning(f"HTTP error parsing collection: {e.code}")
             return []
         except (OSError, ValueError) as e:
-            print(f"Failed to parse collection: {e}")
+            log.warning(f"Failed to parse collection: {e}")
             return []
     
     def load_ids_from_file(self, file_path: Path) -> list[str]:
@@ -442,7 +446,7 @@ After installation, restart this application.
                 content = f.read()
             ids = self.extract_workshop_ids_from_text(content)
         except (IOError, PermissionError) as e:
-            print(f"Failed to read file: {e}")
+            log.warning(f"Failed to read file: {e}")
         
         return ids
     
@@ -491,7 +495,7 @@ class ModInstaller:
                         shutil.rmtree(item)
                         removed += 1
             except (OSError, PermissionError) as e:
-                print(f"Failed to remove {item}: {e}")
+                log.warning(f"Failed to remove {item}: {e}")
         
         return removed
     
@@ -530,7 +534,7 @@ class ModInstaller:
                 shutil.copytree(source_path, dest_path)
                 return True
             except (OSError, PermissionError, shutil.Error) as e:
-                print(f"Failed to copy mod: {e}")
+                log.error(f"Failed to copy mod: {e}")
                 return False
         else:
             # Symlink mode
@@ -557,7 +561,7 @@ class ModInstaller:
                 except Exception:
                     pass
             
-            print(f"Failed to create symlink: {e}")
+            log.error(f"Failed to create symlink: {e}")
             return False
     
     def create_symlink(self, source_path: Path, link_name: str = None) -> bool:
