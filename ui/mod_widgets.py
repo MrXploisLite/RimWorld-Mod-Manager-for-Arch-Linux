@@ -199,13 +199,22 @@ class DraggableModList(QListWidget):
                 self.mod_activated.emit(item.mod)
     
     def add_mod(self, mod: ModInfo) -> ModListItem:
-        """Add a mod to the list."""
+        """Add a mod to the list. Prevents duplicates (case-insensitive)."""
+        # Check if mod already exists (case-insensitive by package_id)
+        mod_id_lower = mod.package_id.lower()
+        for i in range(self.count()):
+            item = self.item(i)
+            if isinstance(item, ModListItem):
+                if item.mod.package_id.lower() == mod_id_lower:
+                    # Already exists, don't add duplicate
+                    return item
+        
         item = ModListItem(mod)
         self.addItem(item)
         return item
     
     def add_mods(self, mods: list[ModInfo]) -> None:
-        """Add multiple mods to the list."""
+        """Add multiple mods to the list. Prevents duplicates."""
         for mod in mods:
             self.add_mod(mod)
     

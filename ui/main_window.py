@@ -1438,9 +1438,17 @@ class MainWindow(QMainWindow):
         if self.current_installation:
             saved_active_ids = self.config.get_active_mods(str(self.current_installation.path))
         
+        # Deduplicate saved_active_ids (case-insensitive, preserve order)
         if saved_active_ids:
-            # Use saved config (preserves load order)
-            active_ids = set(pid.lower() for pid in saved_active_ids)
+            seen = set()
+            deduped = []
+            for pid in saved_active_ids:
+                pid_lower = pid.lower()
+                if pid_lower not in seen:
+                    seen.add(pid_lower)
+                    deduped.append(pid)
+            saved_active_ids = deduped
+            active_ids = seen
         elif self.installer:
             # Fall back to reading symlinks (for first run or migration)
             for target in self.installer.get_installed_mods():
@@ -1455,18 +1463,23 @@ class MainWindow(QMainWindow):
         # Build a map for ordering
         mod_by_id = {mod.package_id.lower(): mod for mod in self.all_mods}
         
-        # If we have saved order, use it
+        # If we have saved order, use it (already deduplicated)
+        seen_active = set()
         if saved_active_ids:
             for pid in saved_active_ids:
-                mod = mod_by_id.get(pid.lower())
-                if mod:
+                pid_lower = pid.lower()
+                mod = mod_by_id.get(pid_lower)
+                if mod and pid_lower not in seen_active:
+                    seen_active.add(pid_lower)
                     mod.is_active = True
                     self.active_mods.append(mod)
         
         # Add any remaining mods
         for mod in self.all_mods:
-            if mod.package_id.lower() in active_ids:
-                if mod not in self.active_mods:
+            mod_lower = mod.package_id.lower()
+            if mod_lower in active_ids:
+                if mod_lower not in seen_active:
+                    seen_active.add(mod_lower)
                     mod.is_active = True
                     self.active_mods.append(mod)
             else:
