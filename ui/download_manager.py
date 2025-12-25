@@ -282,69 +282,69 @@ class LiveDownloadWorker(QThread):
                         if not line:
                             continue
                     
-                    # Filter out noisy/repetitive lines
-                    skip_patterns = [
-                        "Redirecting stderr",
-                        "Logging directory",
-                        "UpdateUI: skip",
-                        "Steam Console Client",
-                        "type 'quit'",
-                        "[0m",  # ANSI codes
-                        "CProcessWorkItem",
-                        "Work Item",
-                        "d3ddriverquery",
-                    ]
+                        # Filter out noisy/repetitive lines
+                        skip_patterns = [
+                            "Redirecting stderr",
+                            "Logging directory",
+                            "UpdateUI: skip",
+                            "Steam Console Client",
+                            "type 'quit'",
+                            "[0m",  # ANSI codes
+                            "CProcessWorkItem",
+                            "Work Item",
+                            "d3ddriverquery",
+                        ]
                     
-                    should_skip = any(p in line for p in skip_patterns)
+                        should_skip = any(p in line for p in skip_patterns)
                     
-                    # Clean ANSI codes
-                    clean_line = re.sub(r'\[0m', '', line).strip()
+                        # Clean ANSI codes
+                        clean_line = re.sub(r'\[0m', '', line).strip()
                     
-                    if not clean_line or should_skip:
-                        continue
+                        if not clean_line or should_skip:
+                            continue
                     
-                    # Detect login success (only show once)
-                    if "Connecting anonymously" in clean_line and not logged_in:
-                        self.log_output.emit("[SESSION] Connecting to Steam...")
-                        continue
-                    elif "Waiting for user info" in clean_line and not logged_in:
-                        logged_in = True
-                        self.log_output.emit("[SESSION] Connected to Steam (session will be reused)")
-                        continue
-                    elif logged_in and ("Connecting anonymously" in clean_line or "Waiting for" in clean_line):
-                        # Skip repeated connection messages
-                        continue
+                        # Detect login success (only show once)
+                        if "Connecting anonymously" in clean_line and not logged_in:
+                            self.log_output.emit("[SESSION] Connecting to Steam...")
+                            continue
+                        elif "Waiting for user info" in clean_line and not logged_in:
+                            logged_in = True
+                            self.log_output.emit("[SESSION] Connected to Steam (session will be reused)")
+                            continue
+                        elif logged_in and ("Connecting anonymously" in clean_line or "Waiting for" in clean_line):
+                            # Skip repeated connection messages
+                            continue
                     
-                    # Detect which mod is being downloaded
-                    download_match = re.search(r'Downloading item (\d+)', clean_line)
-                    if download_match:
-                        current_wid = download_match.group(1)
-                        self.log_output.emit(f"\n[DOWNLOAD] Mod {current_wid}...")
-                        self.item_progress.emit(current_wid, 10)
-                        continue
+                        # Detect which mod is being downloaded
+                        download_match = re.search(r'Downloading item (\d+)', clean_line)
+                        if download_match:
+                            current_wid = download_match.group(1)
+                            self.log_output.emit(f"\n[DOWNLOAD] Mod {current_wid}...")
+                            self.item_progress.emit(current_wid, 10)
+                            continue
                     
-                    # Detect success
-                    success_match = re.search(r'Success.*Downloaded item (\d+)', clean_line)
-                    if success_match:
-                        wid = success_match.group(1)
-                        self.item_progress.emit(wid, 100)
-                        self.log_output.emit(f"[OK] Mod {wid} downloaded")
-                        continue
+                        # Detect success
+                        success_match = re.search(r'Success.*Downloaded item (\d+)', clean_line)
+                        if success_match:
+                            wid = success_match.group(1)
+                            self.item_progress.emit(wid, 100)
+                            self.log_output.emit(f"[OK] Mod {wid} downloaded")
+                            continue
                     
-                    # Show other relevant output
-                    if "Loading Steam API" in clean_line:
-                        self.log_output.emit("[SESSION] Loading Steam API...")
-                    elif "Unloading Steam API" in clean_line:
-                        self.log_output.emit("[SESSION] Finishing up...")
-                    elif "ERROR" in clean_line.upper() or "FAILED" in clean_line.upper():
-                        self.log_output.emit(f"[ERROR] {clean_line}")
-                    elif "%" in clean_line:
-                        # Progress percentage
-                        self.log_output.emit(f"  {clean_line}")
+                        # Show other relevant output
+                        if "Loading Steam API" in clean_line:
+                            self.log_output.emit("[SESSION] Loading Steam API...")
+                        elif "Unloading Steam API" in clean_line:
+                            self.log_output.emit("[SESSION] Finishing up...")
+                        elif "ERROR" in clean_line.upper() or "FAILED" in clean_line.upper():
+                            self.log_output.emit(f"[ERROR] {clean_line}")
+                        elif "%" in clean_line:
+                            # Progress percentage
+                            self.log_output.emit(f"  {clean_line}")
                     
-                    if self._cancelled:
-                        self._process.terminate()
-                        return results
+                        if self._cancelled:
+                            self._process.terminate()
+                            return results
                 
                 self._process.wait()
                 
