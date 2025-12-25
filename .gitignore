@@ -38,3 +38,6 @@ Thumbs.db
 
 # Project specific
 *.log
+
+# Kiro IDE
+.kiro/
