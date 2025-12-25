@@ -121,4 +121,10 @@ Contributions welcome! See [CONTRIBUTING.md](CONTRIBUTING.md)
 
 ## License
 
-MIT License
+GPL-3.0 License - See [LICENSE](LICENSE) for details.
+
+This means if you fork or use this code, you must:
+- Keep the source code open
+- Include the original license and copyright
+- State your changes
+- Use the same GPL-3.0 license

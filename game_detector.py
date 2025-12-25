@@ -143,13 +143,8 @@ class GameDetector:
     
     def _detect_windows_steam(self) -> None:
         """Detect Steam installation on Windows."""
-        steam_paths = [
-            Path(os.environ.get('PROGRAMFILES(X86)', 'C:/Program Files (x86)')) / 'Steam',
-            Path(os.environ.get('PROGRAMFILES', 'C:/Program Files')) / 'Steam',
-            Path('C:/Steam'),
-            Path('D:/Steam'),
-            Path('D:/SteamLibrary'),
-        ]
+        # Get all possible Steam library folders
+        steam_paths = self._get_windows_steam_libraries()
         
         for steam_path in steam_paths:
             rimworld_path = steam_path / 'steamapps/common/RimWorld'
@@ -164,14 +159,65 @@ class GameDetector:
                 if install not in self.installations:
                     self.installations.append(install)
     
+    def _get_windows_steam_libraries(self) -> list[Path]:
+        """Get all Steam library folders on Windows."""
+        libraries = []
+        
+        # Default Steam paths
+        default_paths = [
+            Path(os.environ.get('PROGRAMFILES(X86)', 'C:/Program Files (x86)')) / 'Steam',
+            Path(os.environ.get('PROGRAMFILES', 'C:/Program Files')) / 'Steam',
+            Path('C:/Steam'),
+        ]
+        
+        # Check all drives for Steam and SteamLibrary folders
+        for drive in 'CDEFGHIJKLMNOPQRSTUVWXYZ':
+            drive_path = Path(f'{drive}:/')
+            if drive_path.exists():
+                potential_paths = [
+                    drive_path / 'Steam',
+                    drive_path / 'SteamLibrary',
+                    drive_path / 'Games/Steam',
+                    drive_path / 'Games/SteamLibrary',
+                    drive_path / 'Program Files/Steam',
+                    drive_path / 'Program Files (x86)/Steam',
+                ]
+                for p in potential_paths:
+                    if p.exists() and p not in libraries:
+                        libraries.append(p)
+        
+        # Parse libraryfolders.vdf for additional libraries
+        for steam_path in default_paths:
+            vdf_path = steam_path / 'steamapps/libraryfolders.vdf'
+            if vdf_path.exists():
+                try:
+                    additional = self._parse_library_folders_vdf(vdf_path)
+                    for lib in additional:
+                        if lib not in libraries:
+                            libraries.append(lib)
+                except Exception:
+                    pass
+        
+        return libraries
+    
     def _detect_windows_gog(self) -> None:
         """Detect GOG installation on Windows."""
         gog_paths = [
             Path(os.environ.get('PROGRAMFILES(X86)', 'C:/Program Files (x86)')) / 'GOG Galaxy/Games/RimWorld',
             Path(os.environ.get('PROGRAMFILES', 'C:/Program Files')) / 'GOG Galaxy/Games/RimWorld',
-            Path('C:/GOG Games/RimWorld'),
-            Path('D:/GOG Games/RimWorld'),
         ]
+        
+        # Check all drives for GOG installations
+        for drive in 'CDEFGHIJKLMNOPQRSTUVWXYZ':
+            drive_path = Path(f'{drive}:/')
+            if drive_path.exists():
+                potential_paths = [
+                    drive_path / 'GOG Games/RimWorld',
+                    drive_path / 'Games/GOG/RimWorld',
+                    drive_path / 'Games/RimWorld',
+                    drive_path / 'GOG Galaxy/Games/RimWorld',
+                ]
+                gog_paths.extend(potential_paths)
         
         for gog_path in gog_paths:
             if gog_path.exists() and self._is_valid_rimworld(gog_path):
@@ -231,13 +277,10 @@ class GameDetector:
     
     def _detect_steam_native(self) -> None:
         """Detect native Linux Steam installation."""
-        steam_paths = [
-            Path.home() / ".local/share/Steam",
-            Path.home() / ".steam/steam",
-            Path.home() / ".steam/debian-installation",
-        ]
+        # Get all Steam library folders
+        steam_libraries = self._get_linux_steam_libraries()
         
-        for steam_path in steam_paths:
+        for steam_path in steam_libraries:
             rimworld_path = steam_path / "steamapps/common/RimWorld"
             if rimworld_path.exists() and self._is_valid_rimworld(rimworld_path):
                 is_windows = self._is_windows_build(rimworld_path)
@@ -256,6 +299,88 @@ class GameDetector:
                     prefix = self._find_proton_prefix(steam_path)
                     if prefix:
                         install.proton_prefix = prefix
+    
+    def _get_linux_steam_libraries(self) -> list[Path]:
+        """Get all Steam library folders on Linux."""
+        libraries = []
+        
+        # Default Steam paths
+        default_paths = [
+            Path.home() / ".local/share/Steam",
+            Path.home() / ".steam/steam",
+            Path.home() / ".steam/debian-installation",
+            Path("/usr/share/steam"),
+            Path("/usr/local/share/steam"),
+        ]
+        
+        for p in default_paths:
+            if p.exists() and p not in libraries:
+                libraries.append(p)
+        
+        # Parse libraryfolders.vdf for additional libraries
+        for steam_path in default_paths:
+            vdf_path = steam_path / 'steamapps/libraryfolders.vdf'
+            if vdf_path.exists():
+                try:
+                    additional = self._parse_library_folders_vdf(vdf_path)
+                    for lib in additional:
+                        if lib not in libraries:
+                            libraries.append(lib)
+                except Exception:
+                    pass
+        
+        # Check common additional library locations
+        common_lib_paths = [
+            Path.home() / "Games/SteamLibrary",
+            Path.home() / "SteamLibrary",
+            Path("/mnt"),
+            Path("/media"),
+            Path("/run/media"),
+        ]
+        
+        for base_path in common_lib_paths:
+            if base_path.exists():
+                # Direct SteamLibrary
+                if (base_path / "steamapps").exists():
+                    if base_path not in libraries:
+                        libraries.append(base_path)
+                # Check subdirectories (for /mnt, /media, etc.)
+                try:
+                    for subdir in base_path.iterdir():
+                        if subdir.is_dir():
+                            steam_lib = subdir / "SteamLibrary"
+                            if steam_lib.exists() and steam_lib not in libraries:
+                                libraries.append(steam_lib)
+                            # Direct steamapps in mount
+                            if (subdir / "steamapps").exists() and subdir not in libraries:
+                                libraries.append(subdir)
+                except PermissionError:
+                    pass
+        
+        return libraries
+    
+    def _parse_library_folders_vdf(self, vdf_path: Path) -> list[Path]:
+        """Parse Steam's libraryfolders.vdf to find additional library paths."""
+        libraries = []
+        
+        try:
+            with open(vdf_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            
+            # Simple regex to find path entries
+            import re
+            # Match "path" followed by the actual path
+            pattern = r'"path"\s+"([^"]+)"'
+            matches = re.findall(pattern, content)
+            
+            for match in matches:
+                lib_path = Path(match)
+                if lib_path.exists():
+                    libraries.append(lib_path)
+        except Exception:
+            pass
+        
+        return libraries
     
     def _detect_steam_proton(self) -> None:
         """Detect RimWorld in Proton compatibility data."""
@@ -572,19 +697,50 @@ class GameDetector:
             Path.home() / ".wine64",
             Path.home() / "Games",  # Lutris default
             Path.home() / ".local/share/lutris/runners/wine",
-            Path.home() / ".local/share/bottles",  # Bottles app
+            Path.home() / ".local/share/lutris/prefixes",
+            Path.home() / ".local/share/bottles/bottles",  # Bottles app
+            Path.home() / ".var/app/com.usebottles.bottles/data/bottles/bottles",  # Flatpak Bottles
+            Path.home() / ".local/share/PlayOnLinux/wineprefix",
+            Path.home() / ".PlayOnLinux/wineprefix",
         ]
+        
+        # Also check ~/Games for standalone installations
+        games_folder = Path.home() / "Games"
+        if games_folder.exists():
+            try:
+                for item in games_folder.iterdir():
+                    if item.is_dir():
+                        # Check if it's a RimWorld folder directly
+                        if self._is_valid_rimworld(item):
+                            is_windows = self._is_windows_build(item)
+                            install = RimWorldInstallation(
+                                path=item,
+                                install_type=InstallationType.STANDALONE if not is_windows else InstallationType.PROTON_STANDALONE,
+                                has_mods_folder=(item / "Mods").exists(),
+                                has_data_folder=(item / "Data").exists(),
+                                is_windows_build=is_windows,
+                            )
+                            self._detect_save_config_paths(install)
+                            if not any(i.path == item for i in found):
+                                found.append(install)
+                        # Check if it's a Wine prefix
+                        elif (item / "drive_c").exists():
+                            wine_prefixes.append(item)
+            except PermissionError:
+                pass
         
         for prefix_base in wine_prefixes:
             if not prefix_base.exists():
                 continue
             
-            # Search for RimWorld in Program Files
+            # Search for RimWorld in Program Files and common game locations
             search_paths = [
                 "drive_c/Program Files/RimWorld",
                 "drive_c/Program Files (x86)/RimWorld", 
                 "drive_c/Games/RimWorld",
                 "drive_c/GOG Games/RimWorld",
+                "drive_c/Program Files/Steam/steamapps/common/RimWorld",
+                "drive_c/Program Files (x86)/Steam/steamapps/common/RimWorld",
             ]
             
             # If this is a prefix directory, search directly
@@ -601,7 +757,8 @@ class GameDetector:
                             proton_prefix=prefix_base,
                         )
                         self._detect_save_config_paths(install)
-                        found.append(install)
+                        if not any(i.path == rimworld_path for i in found):
+                            found.append(install)
             else:
                 # Search subdirectories (multiple prefixes)
                 try:
@@ -619,7 +776,8 @@ class GameDetector:
                                         proton_prefix=subdir,
                                     )
                                     self._detect_save_config_paths(install)
-                                    found.append(install)
+                                    if not any(i.path == rimworld_path for i in found):
+                                        found.append(install)
                 except PermissionError:
                     continue
         
