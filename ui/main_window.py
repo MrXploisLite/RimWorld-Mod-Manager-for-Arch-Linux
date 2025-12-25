@@ -1316,7 +1316,7 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Error", f"Failed to open folder: {e}")
     
     def _launch_game(self):
-        """Launch RimWorld."""
+        """Launch RimWorld directly from game folder."""
         if not self.current_installation:
             QMessageBox.warning(self, "Error", "No installation selected")
             return
@@ -1356,13 +1356,48 @@ class MainWindow(QMainWindow):
         
         try:
             if self.current_installation.is_windows_build:
-                # Launch via Steam for Proton games
-                # steam://rungameid/294100
-                subprocess.Popen(
-                    ["xdg-open", "steam://rungameid/294100"],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL
-                )
+                # For Windows builds, try to launch via Steam if it's a Steam game
+                # Otherwise use wine/proton directly
+                
+                # First check if there's a proton prefix we can use
+                if self.current_installation.proton_prefix:
+                    # Try to find proton or wine to run the exe
+                    # Use steam-run or just launch via Steam as non-Steam game
+                    
+                    # Method 1: Try steam-run (if available on system)
+                    import shutil
+                    if shutil.which("steam-run"):
+                        subprocess.Popen(
+                            ["steam-run", str(exe_path)],
+                            cwd=str(game_path),
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL
+                        )
+                    # Method 2: Try wine directly
+                    elif shutil.which("wine"):
+                        subprocess.Popen(
+                            ["wine", str(exe_path)],
+                            cwd=str(game_path),
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL,
+                            env={**os.environ, "WINEPREFIX": str(self.current_installation.proton_prefix)}
+                        )
+                    else:
+                        # Fallback: just try to run via xdg-open (might trigger Steam)
+                        subprocess.Popen(
+                            ["xdg-open", str(exe_path)],
+                            cwd=str(game_path),
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL
+                        )
+                else:
+                    # No proton prefix, try xdg-open which might use Steam
+                    subprocess.Popen(
+                        ["xdg-open", str(exe_path)],
+                        cwd=str(game_path),
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL
+                    )
             else:
                 # Launch native Linux version directly
                 subprocess.Popen(
