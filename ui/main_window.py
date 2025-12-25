@@ -1526,8 +1526,8 @@ class MainWindow(QMainWindow):
         active_ids = [mod.package_id for mod in active_mods]
         self.profiles_widget.create_auto_backup(active_ids, "Before applying mods")
         
-        # Get paths of active mods
-        mod_paths = [mod.path for mod in active_mods if mod.path]
+        # Get paths of active mods (exclude Core/DLC - they're already in Data folder)
+        mod_paths = [mod.path for mod in active_mods if mod.path and mod.source != ModSource.GAME]
         
         # Apply
         self.status_bar.showMessage("Applying mod configuration...")
