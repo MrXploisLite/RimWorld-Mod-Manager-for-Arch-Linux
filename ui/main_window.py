@@ -4,6 +4,7 @@ The primary application window with all mod management features.
 """
 
 import os
+import shutil
 import subprocess
 from pathlib import Path
 from typing import Optional

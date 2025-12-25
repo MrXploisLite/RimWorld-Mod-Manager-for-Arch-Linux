@@ -480,8 +480,11 @@ class ModInstaller:
     def create_symlink(self, source_path: Path, link_name: str = None) -> bool:
         """
         Create a symbolic link in the game's Mods folder.
+        On Windows, falls back to directory junction if symlink fails.
         Returns True if successful.
         """
+        import platform
+        
         if not source_path.exists():
             return False
         
@@ -500,6 +503,23 @@ class ModInstaller:
             link_path.symlink_to(source_path)
             return True
         except (OSError, PermissionError) as e:
+            # On Windows, symlinks require admin or Developer Mode
+            # Fall back to directory junction (mklink /J) which doesn't require elevation
+            if platform.system().lower() == 'windows':
+                try:
+                    import subprocess
+                    # Use mklink /J for directory junction (no admin required)
+                    result = subprocess.run(
+                        ['cmd', '/c', 'mklink', '/J', str(link_path), str(source_path)],
+                        capture_output=True,
+                        text=True
+                    )
+                    if result.returncode == 0:
+                        return True
+                    print(f"Failed to create junction: {result.stderr}")
+                except Exception as je:
+                    print(f"Failed to create junction: {je}")
+            
             print(f"Failed to create symlink: {e}")
             return False
     
