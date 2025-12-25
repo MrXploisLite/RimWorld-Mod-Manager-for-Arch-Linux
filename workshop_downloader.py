@@ -47,7 +47,7 @@ class WorkshopDownloader:
     WORKSHOP_URL_PATTERNS = [
         r'steamcommunity\.com/sharedfiles/filedetails/\?id=(\d+)',
         r'steamcommunity\.com/workshop/filedetails/\?id=(\d+)',
-        r'^(\d{9,12})$',  # Just the ID
+        r'^(\d{7,12})$'  # Workshop IDs can be 7-12 digits$',  # Just the ID
     ]
     
     def __init__(self, download_path: Path = None, steamcmd_path: str = ""):
@@ -517,7 +517,7 @@ class ModInstaller:
                     if result.returncode == 0:
                         return True
                     print(f"Failed to create junction: {result.stderr}")
-                except Exception as je:
+                except (subprocess.SubprocessError, FileNotFoundError, OSError) as je:
                     print(f"Failed to create junction: {je}")
             
             print(f"Failed to create symlink: {e}")

@@ -142,13 +142,25 @@ class ConfigHandler:
             with open(self._config_file, 'r', encoding='utf-8') as f:
                 data = json.load(f)
             
+            # Validate data is a dict
+            if not isinstance(data, dict):
+                print("Warning: Config file is not a valid JSON object")
+                return False
+            
             # Update config with loaded values, keeping defaults for missing keys
             for key, value in data.items():
                 if hasattr(self._config, key):
+                    # Type validation for critical fields
+                    if key == 'mod_source_paths' and not isinstance(value, list):
+                        continue
+                    if key == 'custom_game_paths' and not isinstance(value, list):
+                        continue
+                    if key == 'active_mods' and not isinstance(value, dict):
+                        continue
                     setattr(self._config, key, value)
             
             return True
-        except (json.JSONDecodeError, IOError, PermissionError) as e:
+        except (json.JSONDecodeError, IOError, PermissionError, TypeError) as e:
             print(f"Warning: Failed to load config: {e}")
             return False
     

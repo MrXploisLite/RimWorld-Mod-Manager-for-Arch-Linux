@@ -68,31 +68,35 @@ class ModListItem(QListWidgetItem):
 class HoverButtonDelegate(QStyledItemDelegate):
     """Delegate that draws hover buttons on list items."""
     
+    # Button size constants
+    BTN_SIZE = 24
+    BTN_MARGIN = 4
+    
     def __init__(self, parent=None, is_active_list: bool = False):
         super().__init__(parent)
         self.is_active_list = is_active_list
         self._hovered_index = None
-        self._button_rect = QRect()
     
     def paint(self, painter: QPainter, option: QStyleOptionViewItem, index):
         """Paint the item with hover button."""
         # Draw default item
         super().paint(painter, option, index)
         
+        # Validate option rect
+        if option.rect.width() <= 0 or option.rect.height() <= 0:
+            return
+        
         # Draw button on hover
         if option.state & QStyle.StateFlag.State_MouseOver:
             painter.save()
             
-            # Button area on the right
-            btn_size = 24
-            btn_margin = 4
+            # Button area on the right (with margin from edge)
             btn_rect = QRect(
-                option.rect.right() - btn_size - btn_margin,
-                option.rect.top() + (option.rect.height() - btn_size) // 2,
-                btn_size,
-                btn_size
+                option.rect.right() - self.BTN_SIZE - self.BTN_MARGIN - 4,  # Extra padding from edge
+                option.rect.top() + (option.rect.height() - self.BTN_SIZE) // 2,
+                self.BTN_SIZE,
+                self.BTN_SIZE
             )
-            self._button_rect = btn_rect
             
             # Draw button background
             if self.is_active_list:
@@ -123,14 +127,17 @@ class HoverButtonDelegate(QStyledItemDelegate):
         if not index.isValid():
             return super().editorEvent(event, model, option, index)
         
+        # Validate option rect
+        if option.rect.width() <= 0 or option.rect.height() <= 0:
+            return super().editorEvent(event, model, option, index)
+        
         if event.type() == QEvent.Type.MouseButtonRelease:
-            btn_size = 24
-            btn_margin = 4
+            # Calculate button rect locally (not stored as instance variable)
             btn_rect = QRect(
-                option.rect.right() - btn_size - btn_margin,
-                option.rect.top() + (option.rect.height() - btn_size) // 2,
-                btn_size,
-                btn_size
+                option.rect.right() - self.BTN_SIZE - self.BTN_MARGIN - 4,
+                option.rect.top() + (option.rect.height() - self.BTN_SIZE) // 2,
+                self.BTN_SIZE,
+                self.BTN_SIZE
             )
             
             if btn_rect.contains(event.pos()):
@@ -222,10 +229,16 @@ class DraggableModList(QListWidget):
     def remove_selected(self) -> list[ModInfo]:
         """Remove selected items and return the mods."""
         removed = []
+        # Collect rows first, then remove in reverse order to avoid index shifting
+        items_to_remove = []
         for item in self.selectedItems():
             if isinstance(item, ModListItem):
                 removed.append(item.mod)
-            row = self.row(item)
+            items_to_remove.append((self.row(item), item))
+        
+        # Sort by row in reverse order and remove
+        items_to_remove.sort(key=lambda x: x[0], reverse=True)
+        for row, item in items_to_remove:
             self.takeItem(row)
         
         if removed:
@@ -547,15 +560,17 @@ class ModDetailsPanel(QFrame):
             self.deps_label.hide()
         
         # Path - show the mod folder path, not subfolder
-        if mod.path:
+        if mod.path and mod.path.exists():
             # Make sure we're showing the mod root, not About subfolder
             path_str = str(mod.path)
             if path_str.endswith('/About') or path_str.endswith('\\About'):
                 path_str = str(mod.path.parent)
             self.path_label.setText(f"📁 {path_str}")
             self.path_label.show()
+            self.btn_open_folder.setEnabled(True)
         else:
             self.path_label.hide()
+            self.btn_open_folder.setEnabled(False)
         
         # Enable/disable uninstall button based on mod source
         # Don't allow uninstalling core game mods
@@ -563,11 +578,8 @@ class ModDetailsPanel(QFrame):
             self.btn_uninstall.setEnabled(False)
             self.btn_uninstall.setToolTip("Cannot uninstall core game files")
         else:
-            self.btn_uninstall.setEnabled(True)
+            self.btn_uninstall.setEnabled(mod.path is not None and mod.path.exists())
             self.btn_uninstall.setToolTip("Delete this mod permanently")
-        
-        # Enable open folder button if path exists
-        self.btn_open_folder.setEnabled(mod.path is not None and mod.path.exists())
     
     def clear(self) -> None:
         """Clear the details panel."""

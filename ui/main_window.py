@@ -1371,6 +1371,10 @@ class MainWindow(QMainWindow):
             return
         
         try:
+            # Store package_id before any modifications
+            mod_package_id = mod.package_id.lower()
+            mod_name = mod.display_name()
+            
             # First deactivate if active
             if mod.is_active:
                 self._deactivate_mod(mod)
@@ -1386,18 +1390,18 @@ class MainWindow(QMainWindow):
             if mod.path.exists():
                 shutil.rmtree(mod.path)
             
-            # Remove from all_mods list
-            self.all_mods = [m for m in self.all_mods if m.package_id.lower() != mod.package_id.lower()]
+            # Remove from all_mods list (create new list to avoid modification during iteration)
+            self.all_mods = [m for m in self.all_mods if m.package_id.lower() != mod_package_id]
             
             # Clear details panel
             self.details_panel.clear()
             
             self._update_counts()
-            self.status_bar.showMessage(f"Uninstalled: {mod.display_name()}")
+            self.status_bar.showMessage(f"Uninstalled: {mod_name}")
             
             QMessageBox.information(
                 self, "Mod Uninstalled",
-                f"Successfully uninstalled '{mod.display_name()}'."
+                f"Successfully uninstalled '{mod_name}'."
             )
             
         except PermissionError:
