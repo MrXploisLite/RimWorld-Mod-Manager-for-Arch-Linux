@@ -22,10 +22,14 @@ A universal, robust mod manager for RimWorld on Arch Linux and derivatives (Cach
   - Load order validation (loadBefore/loadAfter)
 
 - **Workshop Integration**:
-  - Download mods from Steam Workshop using SteamCMD
-  - Supports URL or mod ID input
-  - Batch download from text file
-  - Parse Steam collection pages
+  - **Integrated Workshop Browser** with embedded web view
+  - Browse Most Popular, Recent, Trending mods directly in-app
+  - One-click add mods to download queue
+  - Parse entire Collections - subscribe all mods at once
+  - Duplicate detection - skip already downloaded mods
+  - Batch download from text file or pasted URLs
+  - Download queue with progress tracking
+  - SteamCMD-based anonymous downloads
 
 - **Save/Config Management**:
   - Automatically detects save/config locations for each installation type
@@ -39,6 +43,9 @@ A universal, robust mod manager for RimWorld on Arch Linux and derivatives (Cach
 **Arch Linux / CachyOS / EndeavourOS:**
 ```bash
 sudo pacman -S python python-pyqt6
+
+# Optional: For integrated Workshop browser (embedded web view)
+sudo pacman -S python-pyqt6-webengine
 ```
 
 **Manjaro:**

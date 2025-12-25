@@ -26,6 +26,7 @@ from workshop_downloader import WorkshopDownloader, ModInstaller, DownloadTask, 
 from ui.mod_widgets import (
     DraggableModList, ModDetailsPanel, ModListControls, ConflictWarningWidget
 )
+from ui.workshop_browser import WorkshopBrowser, WorkshopDownloadDialog
 
 
 class ScanWorker(QThread):
@@ -354,6 +355,14 @@ class MainWindow(QMainWindow):
         
         main_layout.addLayout(actions_bar)
         
+        # Main tab widget
+        self.main_tabs = QTabWidget()
+        
+        # ===== TAB 1: Mod Manager =====
+        mod_manager_tab = QWidget()
+        mod_manager_layout = QVBoxLayout(mod_manager_tab)
+        mod_manager_layout.setContentsMargins(0, 0, 0, 0)
+        
         # Main splitter with three panels
         self.main_splitter = QSplitter(Qt.Orientation.Horizontal)
         
@@ -439,7 +448,27 @@ class MainWindow(QMainWindow):
         else:
             self.main_splitter.setSizes([300, 500, 250])
         
-        main_layout.addWidget(self.main_splitter, 1)
+        mod_manager_layout.addWidget(self.main_splitter, 1)
+        
+        self.main_tabs.addTab(mod_manager_tab, "📦 Mod Manager")
+        
+        # ===== TAB 2: Workshop Browser =====
+        self.workshop_tab = QWidget()
+        workshop_layout = QVBoxLayout(self.workshop_tab)
+        workshop_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # Placeholder - will be populated when downloader is ready
+        self.workshop_browser = None
+        self.workshop_placeholder = QLabel(
+            "<h3>Select a RimWorld installation first</h3>"
+            "<p>The Workshop browser will be available after selecting an installation.</p>"
+        )
+        self.workshop_placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        workshop_layout.addWidget(self.workshop_placeholder)
+        
+        self.main_tabs.addTab(self.workshop_tab, "🔧 Workshop Browser")
+        
+        main_layout.addWidget(self.main_tabs, 1)
         
         # Status bar
         self.status_bar = QStatusBar()
@@ -576,6 +605,9 @@ class MainWindow(QMainWindow):
             # Set up downloader
             workshop_path = self.config.get_default_workshop_path()
             self.downloader = WorkshopDownloader(workshop_path)
+            
+            # Set up workshop browser
+            self._setup_workshop_browser()
             
             # Scan mods
             self._scan_mods()
@@ -912,14 +944,44 @@ class MainWindow(QMainWindow):
         if dialog.exec():
             self._scan_mods()
     
-    def _show_workshop_dialog(self):
-        """Show the workshop download dialog."""
+    def _setup_workshop_browser(self):
+        """Set up the Workshop browser tab."""
         if not self.downloader:
-            self.downloader = WorkshopDownloader(self.config.get_default_workshop_path())
+            return
         
-        dialog = WorkshopDialog(self.downloader, self)
-        dialog.download_requested.connect(self._start_workshop_download)
-        dialog.exec()
+        # Get already downloaded mod IDs
+        downloaded_ids = set()
+        workshop_path = self.config.get_default_workshop_path()
+        if workshop_path.exists():
+            for item in workshop_path.iterdir():
+                if item.is_dir() and item.name.isdigit():
+                    downloaded_ids.add(item.name)
+        
+        # Remove placeholder if exists
+        if self.workshop_placeholder:
+            self.workshop_placeholder.setParent(None)
+            self.workshop_placeholder = None
+        
+        # Remove old browser if exists
+        if self.workshop_browser:
+            self.workshop_browser.setParent(None)
+        
+        # Create new workshop browser
+        self.workshop_browser = WorkshopBrowser(downloaded_ids, self.workshop_tab)
+        self.workshop_browser.download_requested.connect(self._start_workshop_download)
+        
+        # Add to tab layout
+        layout = self.workshop_tab.layout()
+        layout.addWidget(self.workshop_browser)
+    
+    def _show_workshop_dialog(self):
+        """Show the workshop download dialog - now switches to Workshop tab."""
+        # Switch to Workshop tab
+        self.main_tabs.setCurrentIndex(1)
+        
+        # Focus the URL input if browser is available
+        if self.workshop_browser:
+            self.workshop_browser.url_input.setFocus()
     
     def _start_workshop_download(self, workshop_ids: list[str]):
         """Start downloading workshop mods."""
@@ -944,6 +1006,10 @@ class MainWindow(QMainWindow):
         """Handle download completion."""
         self.progress_bar.setValue(self.progress_bar.value() + 1)
         self.status_bar.showMessage(f"Downloaded mod {task.workshop_id}")
+        
+        # Update workshop browser
+        if self.workshop_browser:
+            self.workshop_browser.mark_downloaded(task.workshop_id)
         
         if self.progress_bar.value() >= self.progress_bar.maximum():
             self.progress_bar.setVisible(False)

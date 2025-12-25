@@ -10,6 +10,7 @@ from .mod_widgets import (
     ConflictWarningWidget
 )
 from .main_window import MainWindow
+from .workshop_browser import WorkshopBrowser, WorkshopDownloadDialog
 
 __all__ = [
     'ModListItem',
@@ -18,4 +19,6 @@ __all__ = [
     'ModListControls',
     'ConflictWarningWidget',
     'MainWindow',
+    'WorkshopBrowser',
+    'WorkshopDownloadDialog',
 ]
