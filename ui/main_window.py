@@ -559,6 +559,7 @@ class MainWindow(QMainWindow):
         self.active_controls.move_down.connect(self.active_list.move_selected_down)
         self.active_controls.move_top.connect(self.active_list.move_selected_to_top)
         self.active_controls.move_bottom.connect(self.active_list.move_selected_to_bottom)
+        self.active_controls.auto_sort.connect(self._auto_sort_mods)
         
         # List changes
         self.active_list.mods_changed.connect(self._check_conflicts)
@@ -857,6 +858,26 @@ class MainWindow(QMainWindow):
         
         self.conflict_warning.set_warnings(conflicts, missing_deps, incompatibilities)
     
+    def _auto_sort_mods(self):
+        """Automatically sort active mods by dependencies."""
+        active_mods = self.active_list.get_mods()
+        
+        if not active_mods:
+            return
+        
+        self.status_bar.showMessage("Auto-sorting mods by dependencies...")
+        
+        # Use the mod parser's topological sort
+        sorted_mods = self.mod_parser.sort_by_load_order(active_mods)
+        
+        # Clear and repopulate the active list
+        self.active_list.clear_mods()
+        for mod in sorted_mods:
+            self.active_list.add_mod(mod)
+        
+        self._check_conflicts()
+        self.status_bar.showMessage(f"Sorted {len(sorted_mods)} mods by load order")
+    
     def _apply_mods(self):
         """Apply the current mod configuration to the game."""
         if not self.installer:
@@ -1023,18 +1044,23 @@ class MainWindow(QMainWindow):
         self.download_manager.start_downloads(steamcmd_path, workshop_ids, download_path)
         self.status_bar.showMessage(f"Downloading {len(workshop_ids)} mod(s)...")
     
-    def _on_downloads_complete(self):
-        """Handle all downloads complete - auto refresh mods."""
+    def _on_downloads_complete(self, download_path: str):
+        """Handle all downloads complete - auto refresh mods and add path."""
         self.status_bar.showMessage("Downloads complete! Refreshing mod list...")
+        
+        # Auto-add download path to mod source paths if not already there
+        if download_path and download_path not in self.config.config.mod_source_paths:
+            self.config.add_mod_source_path(download_path)
+            self.status_bar.showMessage(f"Added {download_path} to mod sources")
         
         # Auto-refresh the mod list
         self._scan_mods()
         
         # Update workshop browser downloaded IDs
         if self.workshop_browser:
-            download_path = self.config.get_default_workshop_path()
-            if download_path.exists():
-                for item in download_path.iterdir():
+            download_path_obj = self.config.get_default_workshop_path()
+            if download_path_obj.exists():
+                for item in download_path_obj.iterdir():
                     if item.is_dir() and item.name.isdigit():
                         self.workshop_browser.mark_downloaded(item.name)
         

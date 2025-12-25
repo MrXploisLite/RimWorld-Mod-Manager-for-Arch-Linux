@@ -45,7 +45,10 @@ def setup_environment():
     os.environ["QT_LOGGING_RULES"] = "qt.qpa.services=false"
     
     # Suppress JS console errors from web engine
-    os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = "--disable-logging"
+    os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = "--disable-logging --log-level=3"
+    
+    # Suppress WebEngine debug output
+    os.environ["QT_LOGGING_RULES"] = "qt.qpa.services=false;qt.webenginecontext.debug=false"
     
     # Ensure XDG directories exist
     xdg_config = os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config"))

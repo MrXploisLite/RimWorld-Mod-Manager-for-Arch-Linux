@@ -81,17 +81,37 @@ class SteamCMDChecker:
             return "git clone https://aur.archlinux.org/steamcmd.git && cd steamcmd && makepkg -si"
 
 
+def get_mod_name_from_path(mod_path: Path) -> str:
+    """Extract mod name from About.xml in the mod folder."""
+    about_xml = mod_path / "About" / "About.xml"
+    if not about_xml.exists():
+        about_xml = mod_path / "About" / "about.xml"
+    
+    if about_xml.exists():
+        try:
+            import xml.etree.ElementTree as ET
+            tree = ET.parse(about_xml)
+            root = tree.getroot()
+            name_elem = root.find("name")
+            if name_elem is not None and name_elem.text:
+                return name_elem.text.strip()
+        except Exception:
+            pass
+    
+    return mod_path.name
+
+
 class LiveDownloadWorker(QThread):
     """
     Download worker with live output streaming.
-    Emits real-time SteamCMD output to the UI.
+    Uses batch download mode - single SteamCMD session for all mods.
     """
     
     # Signals
     log_output = pyqtSignal(str)  # Real-time log line
     item_started = pyqtSignal(str)  # workshop_id
     item_progress = pyqtSignal(str, int)  # workshop_id, progress %
-    item_complete = pyqtSignal(str, str)  # workshop_id, output_path
+    item_complete = pyqtSignal(str, str, str)  # workshop_id, output_path, mod_name
     item_failed = pyqtSignal(str, str)  # workshop_id, error
     all_complete = pyqtSignal(int, int)  # success_count, fail_count
     
@@ -114,43 +134,48 @@ class LiveDownloadWorker(QThread):
         
         self.download_path.mkdir(parents=True, exist_ok=True)
         
-        for wid in self.workshop_ids:
-            if self._cancelled:
-                self.log_output.emit(f"[CANCELLED] Download cancelled by user")
-                break
-            
-            self.item_started.emit(wid)
-            self.log_output.emit(f"\n{'='*50}")
-            self.log_output.emit(f"[DOWNLOAD] Starting download: {wid}")
-            self.log_output.emit(f"{'='*50}\n")
-            
-            result = self._download_single(wid)
-            
-            if result:
+        # Use batch download - single SteamCMD session for all mods
+        self.log_output.emit(f"[INFO] Starting batch download of {len(self.workshop_ids)} mod(s)")
+        self.log_output.emit(f"[INFO] Using single SteamCMD session for efficiency\n")
+        
+        results = self._download_batch(self.workshop_ids)
+        
+        for wid, result_path in results.items():
+            if result_path:
+                mod_name = get_mod_name_from_path(result_path)
                 success += 1
-                self.item_complete.emit(wid, str(result))
-                self.log_output.emit(f"\n[SUCCESS] Downloaded {wid} -> {result}\n")
+                self.item_complete.emit(wid, str(result_path), mod_name)
+                self.log_output.emit(f"[SUCCESS] {mod_name} ({wid}) -> {result_path}")
             else:
                 failed += 1
                 self.item_failed.emit(wid, "Download failed")
-                self.log_output.emit(f"\n[FAILED] Could not download {wid}\n")
         
         self.all_complete.emit(success, failed)
     
-    def _download_single(self, workshop_id: str) -> Optional[Path]:
-        """Download a single mod with live output."""
+    def _download_batch(self, workshop_ids: list[str]) -> dict[str, Optional[Path]]:
+        """Download multiple mods in a single SteamCMD session."""
+        results = {wid: None for wid in workshop_ids}
+        
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
             
+            # Build batch command - login once, download all
             cmd = [
                 self.steamcmd_path,
                 "+force_install_dir", str(temp_path),
                 "+login", "anonymous",
-                "+workshop_download_item", self.RIMWORLD_APPID, workshop_id,
-                "+quit"
             ]
             
-            self.log_output.emit(f"[CMD] {' '.join(cmd)}\n")
+            # Add all workshop items to download
+            for wid in workshop_ids:
+                cmd.extend(["+workshop_download_item", self.RIMWORLD_APPID, wid])
+                self.item_started.emit(wid)
+            
+            cmd.append("+quit")
+            
+            self.log_output.emit(f"{'='*50}")
+            self.log_output.emit(f"[BATCH] Downloading {len(workshop_ids)} mods in single session")
+            self.log_output.emit(f"{'='*50}\n")
             
             try:
                 process = subprocess.Popen(
@@ -162,49 +187,106 @@ class LiveDownloadWorker(QThread):
                     universal_newlines=True
                 )
                 
-                # Stream output
+                current_wid = None
+                logged_in = False
+                
+                # Stream output with filtering
                 for line in process.stdout:
                     line = line.rstrip()
-                    if line:
-                        self.log_output.emit(f"  {line}")
-                        
-                        # Parse progress
-                        if "Downloading" in line or "downloading" in line:
-                            match = re.search(r'(\d+(?:\.\d+)?)\s*%', line)
-                            if match:
-                                progress = int(float(match.group(1)))
-                                self.item_progress.emit(workshop_id, progress)
-                        elif "Success" in line:
-                            self.item_progress.emit(workshop_id, 100)
+                    if not line:
+                        continue
+                    
+                    # Filter out noisy/repetitive lines
+                    skip_patterns = [
+                        "Redirecting stderr",
+                        "Logging directory",
+                        "UpdateUI: skip",
+                        "Steam Console Client",
+                        "type 'quit'",
+                        "[0m",  # ANSI codes
+                        "CProcessWorkItem",
+                        "Work Item",
+                        "d3ddriverquery",
+                    ]
+                    
+                    should_skip = any(p in line for p in skip_patterns)
+                    
+                    # Clean ANSI codes
+                    clean_line = re.sub(r'\[0m', '', line).strip()
+                    
+                    if not clean_line or should_skip:
+                        continue
+                    
+                    # Detect login success (only show once)
+                    if "Connecting anonymously" in clean_line and not logged_in:
+                        self.log_output.emit("[SESSION] Connecting to Steam...")
+                        continue
+                    elif "Waiting for user info" in clean_line and not logged_in:
+                        logged_in = True
+                        self.log_output.emit("[SESSION] Connected to Steam (session will be reused)")
+                        continue
+                    elif logged_in and ("Connecting anonymously" in clean_line or "Waiting for" in clean_line):
+                        # Skip repeated connection messages
+                        continue
+                    
+                    # Detect which mod is being downloaded
+                    download_match = re.search(r'Downloading item (\d+)', clean_line)
+                    if download_match:
+                        current_wid = download_match.group(1)
+                        self.log_output.emit(f"\n[DOWNLOAD] Mod {current_wid}...")
+                        self.item_progress.emit(current_wid, 10)
+                        continue
+                    
+                    # Detect success
+                    success_match = re.search(r'Success.*Downloaded item (\d+)', clean_line)
+                    if success_match:
+                        wid = success_match.group(1)
+                        self.item_progress.emit(wid, 100)
+                        self.log_output.emit(f"[OK] Mod {wid} downloaded")
+                        continue
+                    
+                    # Show other relevant output
+                    if "Loading Steam API" in clean_line:
+                        self.log_output.emit("[SESSION] Loading Steam API...")
+                    elif "Unloading Steam API" in clean_line:
+                        self.log_output.emit("[SESSION] Finishing up...")
+                    elif "ERROR" in clean_line.upper() or "FAILED" in clean_line.upper():
+                        self.log_output.emit(f"[ERROR] {clean_line}")
+                    elif "%" in clean_line:
+                        # Progress percentage
+                        self.log_output.emit(f"  {clean_line}")
                     
                     if self._cancelled:
                         process.terminate()
-                        return None
+                        return results
                 
                 process.wait()
                 
                 if process.returncode != 0:
-                    self.log_output.emit(f"[ERROR] SteamCMD exited with code {process.returncode}")
-                    return None
+                    self.log_output.emit(f"\n[WARNING] SteamCMD exited with code {process.returncode}")
                 
-                # Find and move downloaded mod
-                workshop_content = temp_path / "steamapps/workshop/content" / self.RIMWORLD_APPID / workshop_id
+                # Move downloaded mods to final location
+                self.log_output.emit(f"\n[INFO] Moving mods to {self.download_path}...")
                 
-                if not workshop_content.exists():
-                    self.log_output.emit(f"[ERROR] Mod folder not found at {workshop_content}")
-                    return None
+                workshop_content_base = temp_path / "steamapps/workshop/content" / self.RIMWORLD_APPID
                 
-                # Move to final location
-                final_path = self.download_path / workshop_id
-                if final_path.exists():
-                    shutil.rmtree(final_path)
-                
-                shutil.move(str(workshop_content), str(final_path))
-                return final_path
+                for wid in workshop_ids:
+                    workshop_content = workshop_content_base / wid
+                    
+                    if workshop_content.exists():
+                        final_path = self.download_path / wid
+                        if final_path.exists():
+                            shutil.rmtree(final_path)
+                        
+                        shutil.move(str(workshop_content), str(final_path))
+                        results[wid] = final_path
+                    else:
+                        self.log_output.emit(f"[WARNING] Mod {wid} folder not found after download")
                 
             except Exception as e:
                 self.log_output.emit(f"[EXCEPTION] {e}")
-                return None
+        
+        return results
 
 
 class DownloadLogWidget(QWidget):
@@ -212,13 +294,14 @@ class DownloadLogWidget(QWidget):
     Widget showing live download progress and logs.
     """
     
-    download_complete = pyqtSignal()
+    download_complete = pyqtSignal(str)  # Emits download path for auto-add
     
     def __init__(self, parent=None):
         super().__init__(parent)
         self._setup_ui()
         self._worker: Optional[LiveDownloadWorker] = None
         self._items: dict[str, DownloadItem] = {}
+        self._download_path: Optional[Path] = None
     
     def _setup_ui(self):
         layout = QVBoxLayout(self)
@@ -292,15 +375,22 @@ class DownloadLogWidget(QWidget):
         controls.addStretch()
         
         self.btn_close = QPushButton("✓ Done")
-        self.btn_close.clicked.connect(lambda: self.download_complete.emit())
+        self.btn_close.clicked.connect(self._emit_complete)
         controls.addWidget(self.btn_close)
         
         layout.addLayout(controls)
+    
+    def _emit_complete(self):
+        """Emit complete signal with download path."""
+        path = str(self._download_path) if self._download_path else ""
+        self.download_complete.emit(path)
     
     def start_downloads(self, steamcmd_path: str, workshop_ids: list[str], download_path: Path):
         """Start downloading mods with live logging."""
         if self._worker and self._worker.isRunning():
             return
+        
+        self._download_path = download_path
         
         # Clear previous state
         self.queue_list.clear()
@@ -308,10 +398,10 @@ class DownloadLogWidget(QWidget):
         
         # Add items to queue
         for wid in workshop_ids:
-            item = DownloadItem(workshop_id=wid, name=f"Mod {wid}")
+            item = DownloadItem(workshop_id=wid, name=f"Workshop Mod {wid}")
             self._items[wid] = item
             
-            list_item = QListWidgetItem(f"⏳ {wid} - Pending")
+            list_item = QListWidgetItem(f"⏳ Mod {wid} - Pending")
             list_item.setData(Qt.ItemDataRole.UserRole, wid)
             self.queue_list.addItem(list_item)
         
@@ -338,12 +428,14 @@ class DownloadLogWidget(QWidget):
     def _on_log(self, line: str):
         """Handle log output."""
         # Color code the output
-        if "[ERROR]" in line or "[EXCEPTION]" in line or "[FAILED]" in line:
+        if "[ERROR]" in line or "[EXCEPTION]" in line or "[FAILED]" in line or "[WARNING]" in line:
             self.log_text.setTextColor(QColor("#ff6b6b"))
-        elif "[SUCCESS]" in line:
+        elif "[SUCCESS]" in line or "[OK]" in line:
             self.log_text.setTextColor(QColor("#69db7c"))
-        elif "[CMD]" in line or "[DOWNLOAD]" in line:
+        elif "[SESSION]" in line or "[BATCH]" in line or "[INFO]" in line:
             self.log_text.setTextColor(QColor("#74c0fc"))
+        elif "[DOWNLOAD]" in line:
+            self.log_text.setTextColor(QColor("#ffd43b"))
         elif line.startswith("="):
             self.log_text.setTextColor(QColor("#ffd43b"))
         else:
@@ -361,15 +453,19 @@ class DownloadLogWidget(QWidget):
     
     def _on_item_started(self, workshop_id: str):
         """Handle item download started."""
-        self._update_queue_item(workshop_id, "⬇️", "Downloading...")
+        self._update_queue_item(workshop_id, "⬇️", "Queued...")
     
     def _on_item_progress(self, workshop_id: str, progress: int):
         """Handle item progress."""
         self._update_queue_item(workshop_id, "⬇️", f"Downloading... {progress}%")
     
-    def _on_item_complete(self, workshop_id: str, path: str):
-        """Handle item complete."""
-        self._update_queue_item(workshop_id, "✅", "Complete")
+    def _on_item_complete(self, workshop_id: str, path: str, mod_name: str):
+        """Handle item complete with mod name."""
+        # Update item with actual mod name
+        if workshop_id in self._items:
+            self._items[workshop_id].name = mod_name
+        
+        self._update_queue_item(workshop_id, "✅", f"{mod_name}")
         self.progress_bar.setValue(self.progress_bar.value() + 1)
         
         done = self.progress_bar.value()
@@ -390,14 +486,15 @@ class DownloadLogWidget(QWidget):
         self._log_info(f"All downloads complete: {success} succeeded, {failed} failed")
         
         if success > 0:
-            self._log_info("Mods are ready! Switch to Mod Manager tab and click refresh to see them.")
+            self._log_info(f"Mods saved to: {self._download_path}")
+            self._log_info("Click 'Done' to refresh mod list and auto-add download path.")
     
     def _update_queue_item(self, workshop_id: str, icon: str, status: str):
         """Update a queue item's display."""
         for i in range(self.queue_list.count()):
             item = self.queue_list.item(i)
             if item.data(Qt.ItemDataRole.UserRole) == workshop_id:
-                item.setText(f"{icon} {workshop_id} - {status}")
+                item.setText(f"{icon} {status}")
                 break
     
     def _cancel_downloads(self):

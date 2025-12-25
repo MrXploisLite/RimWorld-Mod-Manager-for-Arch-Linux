@@ -55,6 +55,8 @@ class ModListItem(QListWidgetItem):
         if not self.mod.is_valid:
             tooltip_parts.append(f"<font color='red'>Error: {self.mod.error_message}</font>")
         
+        tooltip_parts.append("<i>Double-click to activate/deactivate</i>")
+        
         self.setToolTip("<br>".join(tooltip_parts))
         
         # Visual styling for invalid mods
@@ -448,6 +450,7 @@ class ModListControls(QWidget):
     move_down = pyqtSignal()
     move_top = pyqtSignal()
     move_bottom = pyqtSignal()
+    auto_sort = pyqtSignal()  # New signal for auto-sort
     
     def __init__(self, is_active_list: bool = False, parent=None):
         super().__init__(parent)
@@ -487,6 +490,13 @@ class ModListControls(QWidget):
             layout.addWidget(self.btn_bottom)
             
             layout.addStretch()
+            
+            # Auto-sort button
+            self.btn_auto_sort = QPushButton("🔄 Auto-Sort")
+            self.btn_auto_sort.setToolTip("Automatically sort mods by dependencies (loadBefore/loadAfter)")
+            self.btn_auto_sort.setStyleSheet("background-color: #3a3a5a;")
+            self.btn_auto_sort.clicked.connect(self.auto_sort.emit)
+            layout.addWidget(self.btn_auto_sort)
             
             self.btn_deactivate_all = QPushButton("Deactivate All")
             self.btn_deactivate_all.clicked.connect(self.deactivate_all.emit)
