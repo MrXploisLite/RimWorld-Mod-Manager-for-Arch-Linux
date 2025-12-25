@@ -595,9 +595,19 @@ class GameLaunchDialog(QDialog):
                         self._log(f"[INFO] Launching with Proton...", "#74c0fc")
                         
                         env = os.environ.copy()
-                        # Set STEAM_COMPAT_DATA_PATH for Proton prefix
+                        
+                        # Find Steam installation path
+                        steam_path = Path.home() / ".local/share/Steam"
+                        if not steam_path.exists():
+                            steam_path = Path.home() / ".steam/steam"
+                        
+                        # Set required Proton environment variables
+                        env["STEAM_COMPAT_CLIENT_INSTALL_PATH"] = str(steam_path)
+                        
+                        # Set prefix path
                         if self.installation.proton_prefix:
-                            env["STEAM_COMPAT_DATA_PATH"] = str(self.installation.proton_prefix.parent)
+                            compat_data = self.installation.proton_prefix.parent
+                            env["STEAM_COMPAT_DATA_PATH"] = str(compat_data)
                             env["WINEPREFIX"] = str(self.installation.proton_prefix)
                             self._log(f"[INFO] Prefix: {self.installation.proton_prefix}", "#74c0fc")
                         else:
@@ -607,13 +617,36 @@ class GameLaunchDialog(QDialog):
                             env["STEAM_COMPAT_DATA_PATH"] = str(default_prefix)
                             self._log(f"[INFO] Using default prefix: {default_prefix}", "#74c0fc")
                         
-                        subprocess.Popen(
-                            [proton_cmd, "run", str(exe_path)],
-                            cwd=str(game_path),
-                            stdout=subprocess.DEVNULL,
-                            stderr=subprocess.DEVNULL,
-                            env=env
-                        )
+                        # Additional env vars for better compatibility
+                        env["PROTON_USE_WINED3D"] = "0"
+                        env["PROTON_NO_ESYNC"] = "0"
+                        env["PROTON_NO_FSYNC"] = "0"
+                        
+                        # Get proton directory for wine binary
+                        proton_dir = Path(proton_cmd).parent
+                        wine_bin = proton_dir / "files" / "bin" / "wine64"
+                        if not wine_bin.exists():
+                            wine_bin = proton_dir / "files" / "bin" / "wine"
+                        
+                        if wine_bin.exists():
+                            # Use wine binary directly from Proton (more reliable)
+                            self._log(f"[INFO] Using Proton's Wine: {wine_bin}", "#74c0fc")
+                            subprocess.Popen(
+                                [str(wine_bin), str(exe_path)],
+                                cwd=str(game_path),
+                                stdout=subprocess.DEVNULL,
+                                stderr=subprocess.DEVNULL,
+                                env=env
+                            )
+                        else:
+                            # Fallback to proton run command
+                            subprocess.Popen(
+                                [proton_cmd, "run", str(exe_path)],
+                                cwd=str(game_path),
+                                stdout=subprocess.DEVNULL,
+                                stderr=subprocess.DEVNULL,
+                                env=env
+                            )
                         self._log(f"[OK] Game started with Proton!", "#69db7c")
                         self.status_label.setText("✅ Launched with Proton!")
                     elif shutil.which("wine"):
