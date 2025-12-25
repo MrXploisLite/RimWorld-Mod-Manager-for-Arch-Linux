@@ -30,6 +30,19 @@ A universal mod manager for RimWorld. Supports Windows, macOS, and Linux.
 - Parse entire Collections
 - Batch downloads with live progress
 - Single session SteamCMD downloads
+- Check for mod updates from Workshop
+- Enhanced mod info (subscribers, favorites, views)
+
+### 📋 Profiles & Backups
+- Save and switch between mod profiles
+- Automatic backups before major changes
+- Import/export from game's ModsConfig.xml
+- Restore previous configurations easily
+
+### 🔧 Tools
+- **Update Checker**: Check Workshop mods for updates
+- **Conflict Resolver**: Analyze conflicts with fix suggestions
+- **Enhanced Info**: View Workshop stats (subs, favs, views)
 
 ### 💾 Save/Config Management
 - Auto-detect save/config locations

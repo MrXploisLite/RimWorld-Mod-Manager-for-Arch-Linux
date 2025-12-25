@@ -875,6 +875,20 @@ class MainWindow(QMainWindow):
         
         self.main_tabs.addTab(self.download_tab, "📥 Downloads")
         
+        # ===== TAB 4: Profiles & Backups =====
+        from ui.profiles_manager import ProfilesManagerWidget
+        self.profiles_widget = ProfilesManagerWidget(self.config.config_dir)
+        self.profiles_widget.profile_loaded.connect(self._on_profile_loaded)
+        self.main_tabs.addTab(self.profiles_widget, "📋 Profiles")
+        
+        # ===== TAB 5: Tools (Update Checker, Conflict Resolver) =====
+        from ui.tools_widgets import ToolsTabWidget
+        self.tools_widget = ToolsTabWidget(self.mod_parser)
+        self.tools_widget.update_mods.connect(self._start_workshop_download)
+        self.tools_widget.auto_sort_requested.connect(self._auto_sort_mods)
+        self.tools_widget.deactivate_mod.connect(self._deactivate_mod_by_id)
+        self.main_tabs.addTab(self.tools_widget, "🔧 Tools")
+        
         main_layout.addWidget(self.main_tabs, 1)
         
         # Status bar
@@ -1035,6 +1049,14 @@ class MainWindow(QMainWindow):
             
             # Set up workshop browser
             self._setup_workshop_browser()
+            
+            # Set up profiles widget with config path and mod getter
+            if install.config_path:
+                self.profiles_widget.set_config_path(install.config_path)
+            self.profiles_widget.set_current_mods_getter(self._get_active_mod_ids)
+            
+            # Set up tools widget with mod getter
+            self.tools_widget.set_mods_getter(self._get_all_active_mods)
             
             # Scan mods
             self._scan_mods()
@@ -1223,6 +1245,7 @@ class MainWindow(QMainWindow):
         selected = self.available_list.get_selected_mods()
         if selected:
             self.details_panel.show_mod(selected[0])
+            self.tools_widget.show_mod_info(selected[0])
             self.active_list.clearSelection()
     
     def _on_active_selection(self):
@@ -1230,6 +1253,7 @@ class MainWindow(QMainWindow):
         selected = self.active_list.get_selected_mods()
         if selected:
             self.details_panel.show_mod(selected[0])
+            self.tools_widget.show_mod_info(selected[0])
             self.available_list.clearSelection()
     
     def _activate_mod(self, mod: ModInfo):
@@ -1294,6 +1318,60 @@ class MainWindow(QMainWindow):
         
         self.conflict_warning.set_warnings(conflicts, missing_deps, incompatibilities)
     
+    def _get_active_mod_ids(self) -> list[str]:
+        """Get list of active mod package IDs in load order."""
+        active_mods = self.active_list.get_mods()
+        return [mod.package_id for mod in active_mods]
+    
+    def _get_all_active_mods(self) -> list:
+        """Get list of active ModInfo objects."""
+        return self.active_list.get_mods()
+    
+    def _deactivate_mod_by_id(self, package_id: str):
+        """Deactivate a mod by its package ID."""
+        mods = self.active_list.get_mods()
+        for mod in mods:
+            if mod.package_id.lower() == package_id.lower():
+                self._deactivate_mod(mod)
+                self.status_bar.showMessage(f"Deactivated: {mod.display_name()}")
+                return
+        self.status_bar.showMessage(f"Mod not found: {package_id}")
+    
+    def _on_profile_loaded(self, mod_ids: list[str]):
+        """Handle profile/backup loaded - update mod lists."""
+        if not mod_ids:
+            return
+        
+        # Create auto-backup before loading profile
+        current_ids = self._get_active_mod_ids()
+        if current_ids:
+            self.profiles_widget.create_auto_backup(current_ids, "Before loading profile")
+        
+        # Build mod lookup
+        mod_by_id = {mod.package_id.lower(): mod for mod in self.all_mods}
+        active_ids_set = set(pid.lower() for pid in mod_ids)
+        
+        # Clear current lists
+        self.available_list.clear_mods()
+        self.active_list.clear_mods()
+        
+        # Add active mods in profile order
+        for pid in mod_ids:
+            mod = mod_by_id.get(pid.lower())
+            if mod:
+                mod.is_active = True
+                self.active_list.add_mod(mod)
+        
+        # Add remaining mods to available list
+        for mod in self.all_mods:
+            if mod.package_id.lower() not in active_ids_set:
+                mod.is_active = False
+                self.available_list.add_mod(mod)
+        
+        self._update_counts()
+        self._check_conflicts()
+        self.status_bar.showMessage(f"Loaded profile with {len(mod_ids)} mods")
+    
     def _auto_sort_mods(self):
         """Automatically sort active mods by dependencies."""
         active_mods = self.active_list.get_mods()
@@ -1322,6 +1400,10 @@ class MainWindow(QMainWindow):
         
         active_mods = self.active_list.get_mods()
         
+        # Create auto-backup before applying
+        active_ids = [mod.package_id for mod in active_mods]
+        self.profiles_widget.create_auto_backup(active_ids, "Before applying mods")
+        
         # Get paths of active mods
         mod_paths = [mod.path for mod in active_mods if mod.path]
         
@@ -1335,7 +1417,6 @@ class MainWindow(QMainWindow):
         
         # Save active mods to config (by package_id in load order)
         if self.current_installation:
-            active_ids = [mod.package_id for mod in active_mods]
             self.config.save_active_mods(str(self.current_installation.path), active_ids)
         
         if failed > 0:
