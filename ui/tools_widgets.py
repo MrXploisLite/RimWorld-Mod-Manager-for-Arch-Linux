@@ -579,7 +579,11 @@ class EnhancedModInfoWidget(QWidget):
         self.info_frame.setVisible(False)
         QApplication.processEvents()
         
-        info_dict = self.fetcher.fetch_info([workshop_id])
+        try:
+            info_dict = self.fetcher.fetch_info([workshop_id])
+        except (OSError, ValueError) as e:
+            self.placeholder.setText(f"Failed to fetch Workshop information: {e}")
+            return
         
         if workshop_id not in info_dict:
             self.placeholder.setText("Failed to fetch Workshop information.\nThe mod may be private or removed.")
@@ -592,7 +596,7 @@ class EnhancedModInfoWidget(QWidget):
         
         self.title_label.setText(info.title or "Unknown Title")
         
-        self.subs_label.setText(f"👥 {info.format_number(info.subscriptions)} subs")
+        self.subs_label.setText(f"�  {info.format_number(info.subscriptions)} subs")
         self.favs_label.setText(f"⭐ {info.format_number(info.favorited)} favs")
         self.views_label.setText(f"👁 {info.format_number(info.views)} views")
         

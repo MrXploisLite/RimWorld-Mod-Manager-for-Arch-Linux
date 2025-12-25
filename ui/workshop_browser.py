@@ -396,6 +396,7 @@ class WorkshopBrowser(QWidget):
         
         try:
             import urllib.request
+            import urllib.error
             
             request = urllib.request.Request(
                 url,
@@ -426,7 +427,11 @@ class WorkshopBrowser(QWidget):
             else:
                 self.status_label.setText("No mods found in collection")
                 
-        except Exception as e:
+        except urllib.error.URLError as e:
+            self.status_label.setText(f"Network error: {e.reason}")
+        except urllib.error.HTTPError as e:
+            self.status_label.setText(f"HTTP error: {e.code}")
+        except (OSError, ValueError) as e:
             self.status_label.setText(f"Failed to parse collection: {e}")
     
     def _remove_selected(self):
