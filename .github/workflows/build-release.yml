@@ -1,0 +1,199 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag (e.g., v0.0.7)'
+        required: true
+        default: 'v0.0.7'
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxcb-cursor0
+          python -m pip install --upgrade pip
+          pip install PyQt6 PyQt6-WebEngine pyinstaller
+      
+      - name: Build with PyInstaller
+        run: |
+          pyinstaller --name RimModManager \
+            --onefile \
+            --windowed \
+            --add-data "resources:resources" \
+            --icon resources/icon.svg \
+            --hidden-import PyQt6.QtWebEngineWidgets \
+            --hidden-import PyQt6.QtWebEngineCore \
+            main.py
+      
+      - name: Package
+        run: |
+          cd dist
+          tar -czvf RimModManager-Linux-x64.tar.gz RimModManager
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-build
+          path: dist/RimModManager-Linux-x64.tar.gz
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install PyQt6 PyQt6-WebEngine pyinstaller
+      
+      - name: Build with PyInstaller
+        run: |
+          pyinstaller --name RimModManager `
+            --onefile `
+            --windowed `
+            --add-data "resources;resources" `
+            --hidden-import PyQt6.QtWebEngineWidgets `
+            --hidden-import PyQt6.QtWebEngineCore `
+            main.py
+      
+      - name: Package
+        run: |
+          cd dist
+          Compress-Archive -Path RimModManager.exe -DestinationPath RimModManager-Windows-x64.zip
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-build
+          path: dist/RimModManager-Windows-x64.zip
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install PyQt6 PyQt6-WebEngine pyinstaller
+      
+      - name: Build with PyInstaller
+        run: |
+          pyinstaller --name RimModManager \
+            --onefile \
+            --windowed \
+            --add-data "resources:resources" \
+            --hidden-import PyQt6.QtWebEngineWidgets \
+            --hidden-import PyQt6.QtWebEngineCore \
+            main.py
+      
+      - name: Package
+        run: |
+          cd dist
+          zip -r RimModManager-macOS-x64.zip RimModManager.app || zip -r RimModManager-macOS-x64.zip RimModManager
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-build
+          path: dist/RimModManager-macOS-x64.zip
+
+  create-release:
+    needs: [build-linux, build-windows, build-macos]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      
+      - name: Get version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.version.outputs.VERSION }}
+          name: RimModManager ${{ steps.version.outputs.VERSION }} (Unstable)
+          draft: false
+          prerelease: true
+          body: |
+            ## ⚠️ Unstable Release - v0.0.7
+            
+            **This is an early development release. Expect bugs and incomplete features.**
+            
+            ### 📥 Downloads
+            - **Windows**: `RimModManager-Windows-x64.zip` - Extract and run `RimModManager.exe`
+            - **Linux**: `RimModManager-Linux-x64.tar.gz` - Extract and run `./RimModManager`
+            - **macOS**: `RimModManager-macOS-x64.zip` - Extract and run the app
+            
+            ### 🔧 Requirements
+            - **SteamCMD** is required for Workshop downloads
+              - Windows: [Download](https://steamcdn-a.akamaihd.net/client/installer/steamcmd.zip) or `choco install steamcmd`
+              - Linux: `yay -S steamcmd` (Arch) or `sudo apt install steamcmd` (Debian/Ubuntu)
+              - macOS: `brew install steamcmd`
+            
+            ### ✨ Features
+            - Detect RimWorld installations (Steam, Proton, Wine, GOG, standalone)
+            - Drag-and-drop mod load order management
+            - Auto-sort mods by dependencies
+            - Download Workshop mods via SteamCMD (parallel downloads)
+            - Embedded Steam Workshop browser
+            - Mod profiles and backups
+            - Conflict detection and resolution
+            
+            ### 🐛 Found a Bug?
+            - **Discord**: `romyr911`
+            - **GitHub Issues**: [Report here](https://github.com/MrXploisLite/RimModManager/issues)
+            
+            ### ⚡ Running from Source (Alternative)
+            ```bash
+            # Clone repo
+            git clone https://github.com/MrXploisLite/RimModManager.git
+            cd RimModManager
+            
+            # Install dependencies
+            pip install PyQt6 PyQt6-WebEngine
+            
+            # Run
+            python main.py
+            ```
+          files: |
+            artifacts/linux-build/RimModManager-Linux-x64.tar.gz
+            artifacts/windows-build/RimModManager-Windows-x64.zip
+            artifacts/macos-build/RimModManager-macOS-x64.zip
