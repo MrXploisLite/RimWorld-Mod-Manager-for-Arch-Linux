@@ -565,24 +565,39 @@ class WorkshopBrowser(QWidget):
             
             request = urllib.request.Request(
                 url,
-                headers={'User-Agent': 'Mozilla/5.0'}
+                headers={'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36'}
             )
             
             with urllib.request.urlopen(request, timeout=30) as response:
                 html = response.read().decode('utf-8', errors='replace')
             
-            # Extract mod IDs
-            pattern = r'sharedfiles/filedetails/\?id=(\d+)'
-            matches = re.findall(pattern, html)
+            # Extract mod IDs using multiple patterns
+            # Pattern 1: Standard URL format
+            pattern1 = r'sharedfiles/filedetails/\?id=(\d{7,12})'
+            # Pattern 2: data-publishedfileid attribute (used in collection items)
+            pattern2 = r'data-publishedfileid=["\']?(\d{7,12})["\']?'
+            # Pattern 3: id parameter in various contexts
+            pattern3 = r'[?&]id=(\d{7,12})'
+            # Pattern 4: Workshop item divs
+            pattern4 = r'class="collectionItem[^"]*"[^>]*id="sharedfile_(\d{7,12})"'
+            # Pattern 5: Direct ID references
+            pattern5 = r'SharedFileBindMouseHover\([^,]*,\s*(\d{7,12})'
             
-            # Remove duplicates while preserving order
-            seen = set()
+            all_matches = set()
+            for pattern in [pattern1, pattern2, pattern3, pattern4, pattern5]:
+                matches = re.findall(pattern, html)
+                all_matches.update(matches)
+            
+            # Also try to find the collection's own ID and exclude it
+            collection_id_match = re.search(r'id=(\d+)', url)
+            collection_id = collection_id_match.group(1) if collection_id_match else None
+            
+            # Remove duplicates while preserving order, exclude collection ID itself
             unique_ids = []
-            for mid in matches:
-                if mid not in seen and mid not in self.queue_ids:
+            for mid in all_matches:
+                if mid != collection_id and mid not in self.queue_ids:
                     # Skip already downloaded if checkbox is checked
                     if not (self.dup_check.isChecked() and mid in self.downloaded_ids):
-                        seen.add(mid)
                         unique_ids.append(mid)
             
             if not unique_ids:
