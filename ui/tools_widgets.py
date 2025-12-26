@@ -194,8 +194,15 @@ class ModUpdateCheckerWidget(QWidget):
         
         self._worker = UpdateCheckWorker(self.checker, workshop_mods)
         self._worker.finished.connect(self._on_check_finished)
+        self._worker.finished.connect(self._cleanup_worker)  # Memory leak fix
         self._worker.error.connect(self._on_check_error)
         self._worker.start()
+    
+    def _cleanup_worker(self):
+        """Clean up finished worker to prevent memory leak."""
+        if self._worker:
+            self._worker.deleteLater()
+            self._worker = None
     
     def _on_check_finished(self, results: list):
         self.btn_check.setEnabled(True)

@@ -78,6 +78,21 @@ class WorkshopBrowser(QWidget):
         
         self._setup_ui()
     
+    def cleanup(self):
+        """Clean up resources to prevent memory leaks (especially WebEngine)."""
+        if hasattr(self, 'web_view') and self.web_view:
+            try:
+                self.web_view.setPage(None)
+                self.web_view.deleteLater()
+            except RuntimeError:
+                pass  # Widget already deleted
+            self.web_view = None
+    
+    def closeEvent(self, event):
+        """Handle widget close - clean up WebEngine."""
+        self.cleanup()
+        super().closeEvent(event)
+    
     def _setup_ui(self):
         """Set up the browser UI."""
         layout = QVBoxLayout(self)
@@ -1084,7 +1099,14 @@ class WorkshopDownloadDialog(QWidget):
         self._download_thread = DownloadThread(self.downloader, workshop_ids)
         self._download_thread.progress.connect(self._on_progress)
         self._download_thread.finished.connect(self._on_finished)
+        self._download_thread.finished.connect(self._cleanup_download_thread)  # Memory leak fix
         self._download_thread.start()
+    
+    def _cleanup_download_thread(self):
+        """Clean up finished download thread to prevent memory leak."""
+        if hasattr(self, '_download_thread') and self._download_thread:
+            self._download_thread.deleteLater()
+            self._download_thread = None
     
     def _on_progress(self, current: int, total: int, workshop_id: str, status: str):
         """Handle download progress."""
