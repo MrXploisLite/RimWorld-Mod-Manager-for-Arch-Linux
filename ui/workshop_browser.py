@@ -369,15 +369,25 @@ class WorkshopBrowser(QWidget):
             self.web_view.setUrl(QUrl(url))
     
     def _add_current_to_queue(self):
-        """Add current page/URL to download queue."""
+        """Add current page/URL to download queue. Auto-detects collections."""
         url = self.url_input.text().strip()
         if not url:
             return
         
-        # Extract workshop ID(s)
+        # Auto-detect if this is a collection URL
+        if 'collection' in url.lower() or ('steamcommunity' in url and 'filedetails' in url):
+            # Check if it's actually a collection by looking at the URL pattern
+            # Collections have ?id= but the page content determines if it's a collection
+            # For now, check if URL contains 'collection' keyword
+            if 'collection' in url.lower():
+                self._parse_collection_async()
+                return
+        
+        # Extract workshop ID for single mod
         workshop_id = self._extract_workshop_id(url)
         if workshop_id:
             self._add_to_queue(workshop_id)
+            self.url_input.clear()  # Clear after adding
         else:
             self.status_label.setText("Could not find mod ID in URL")
     
@@ -546,22 +556,32 @@ class WorkshopBrowser(QWidget):
         
         return names
     
-    def _parse_collection(self):
-        """Parse a Steam collection page for mod IDs."""
+    def _parse_collection_async(self):
+        """Parse collection with progress dialog (non-blocking UI)."""
+        from PyQt6.QtWidgets import QProgressDialog
+        
         url = self.url_input.text().strip()
         if not url:
             url = self.batch_input.toPlainText().strip()
         
-        if "collection" not in url.lower() and "steamcommunity" not in url:
+        if not url:
             self.status_label.setText("Please enter a collection URL")
             return
         
-        self.status_label.setText("Parsing collection...")
+        # Create progress dialog
+        progress = QProgressDialog("Parsing collection...", "Cancel", 0, 0, self)
+        progress.setWindowTitle("Loading Collection")
+        progress.setMinimumDuration(0)
+        progress.setModal(True)
+        progress.show()
         QApplication.processEvents()
         
         try:
             import urllib.request
             import urllib.error
+            
+            progress.setLabelText("Fetching collection page...")
+            QApplication.processEvents()
             
             request = urllib.request.Request(
                 url,
@@ -571,16 +591,17 @@ class WorkshopBrowser(QWidget):
             with urllib.request.urlopen(request, timeout=30) as response:
                 html = response.read().decode('utf-8', errors='replace')
             
+            if progress.wasCanceled():
+                return
+            
+            progress.setLabelText("Extracting mod IDs...")
+            QApplication.processEvents()
+            
             # Extract mod IDs using multiple patterns
-            # Pattern 1: Standard URL format
             pattern1 = r'sharedfiles/filedetails/\?id=(\d{7,12})'
-            # Pattern 2: data-publishedfileid attribute (used in collection items)
             pattern2 = r'data-publishedfileid=["\']?(\d{7,12})["\']?'
-            # Pattern 3: id parameter in various contexts
             pattern3 = r'[?&]id=(\d{7,12})'
-            # Pattern 4: Workshop item divs
             pattern4 = r'class="collectionItem[^"]*"[^>]*id="sharedfile_(\d{7,12})"'
-            # Pattern 5: Direct ID references
             pattern5 = r'SharedFileBindMouseHover\([^,]*,\s*(\d{7,12})'
             
             all_matches = set()
@@ -588,42 +609,65 @@ class WorkshopBrowser(QWidget):
                 matches = re.findall(pattern, html)
                 all_matches.update(matches)
             
-            # Also try to find the collection's own ID and exclude it
+            # Exclude collection's own ID
             collection_id_match = re.search(r'id=(\d+)', url)
             collection_id = collection_id_match.group(1) if collection_id_match else None
             
-            # Remove duplicates while preserving order, exclude collection ID itself
             unique_ids = []
             for mid in all_matches:
                 if mid != collection_id and mid not in self.queue_ids:
-                    # Skip already downloaded if checkbox is checked
                     if not (self.dup_check.isChecked() and mid in self.downloaded_ids):
                         unique_ids.append(mid)
             
             if not unique_ids:
+                progress.close()
                 self.status_label.setText("No new mods found in collection")
                 return
             
-            self.status_label.setText(f"Fetching names for {len(unique_ids)} mods...")
+            if progress.wasCanceled():
+                return
+            
+            progress.setLabelText(f"Fetching names for {len(unique_ids)} mods...")
+            progress.setMaximum(len(unique_ids))
+            progress.setValue(0)
             QApplication.processEvents()
             
-            # Batch fetch mod names (much faster than one-by-one)
+            # Batch fetch mod names
             mod_names = self._fetch_mod_names_batch(unique_ids)
             
+            if progress.wasCanceled():
+                return
+            
+            progress.setLabelText("Adding mods to queue...")
+            QApplication.processEvents()
+            
             added = 0
-            for wid in unique_ids:
+            for i, wid in enumerate(unique_ids):
+                if progress.wasCanceled():
+                    break
                 name = mod_names.get(wid, f"Workshop Mod {wid}")
                 if self._add_to_queue_direct(wid, name):
                     added += 1
+                progress.setValue(i + 1)
+                QApplication.processEvents()
             
+            progress.close()
+            self.url_input.clear()  # Clear URL input after successful parse
             self.status_label.setText(f"Added {added} mods from collection ({len(unique_ids)} found)")
-                
+            
         except urllib.error.URLError as e:
+            progress.close()
             self.status_label.setText(f"Network error: {e.reason}")
         except urllib.error.HTTPError as e:
+            progress.close()
             self.status_label.setText(f"HTTP error: {e.code}")
-        except (OSError, ValueError) as e:
+        except Exception as e:
+            progress.close()
             self.status_label.setText(f"Failed to parse collection: {e}")
+    
+    def _parse_collection(self):
+        """Parse a Steam collection page for mod IDs (calls async version)."""
+        self._parse_collection_async()
     
     def _select_all_queue(self):
         """Select all items in the queue."""
