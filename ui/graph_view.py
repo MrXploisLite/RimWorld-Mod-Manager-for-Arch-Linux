@@ -13,13 +13,13 @@ from PyQt6.QtWidgets import (
     QGraphicsView, QGraphicsScene, QGraphicsItem,
     QGraphicsEllipseItem, QGraphicsLineItem, QGraphicsTextItem,
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
-    QComboBox, QDialog, QDialogButtonBox, QGraphicsRectItem,
-    QToolTip, QApplication
+    QComboBox, QDialog, QDialogButtonBox,
+    QToolTip
 )
 from PyQt6.QtCore import Qt, QRectF, QPointF, QLineF, pyqtSignal
 from PyQt6.QtGui import (
     QPen, QBrush, QColor, QPainter, QFont, QWheelEvent,
-    QMouseEvent, QPainterPath
+    QPainterPath
 )
 
 log = logging.getLogger("rimmodmanager.ui.graph_view")

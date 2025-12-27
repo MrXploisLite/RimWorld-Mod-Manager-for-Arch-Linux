@@ -11,12 +11,12 @@ from PyQt6.QtWidgets import (
     QMessageBox, QProgressBar, QTabWidget, QFrame, 
     QScrollArea, QApplication
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QThread
+from PyQt6.QtCore import pyqtSignal, QThread
 from PyQt6.QtGui import QColor
 
 from mod_parser import (
     ModInfo, ModUpdateChecker, ModUpdateInfo,
-    EnhancedModInfoFetcher, EnhancedModInfo,
+    EnhancedModInfoFetcher,
     ConflictResolver, ConflictInfo, ModParser
 )
 

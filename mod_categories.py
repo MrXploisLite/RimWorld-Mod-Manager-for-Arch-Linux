@@ -5,7 +5,6 @@ Auto-categorize mods based on keywords, package IDs, and known patterns.
 
 from enum import Enum
 from dataclasses import dataclass
-from typing import Optional
 import re
 
 

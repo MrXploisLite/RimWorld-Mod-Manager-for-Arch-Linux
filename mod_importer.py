@@ -8,7 +8,6 @@ import logging
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from dataclasses import dataclass
-from typing import Optional
 from enum import Enum
 
 log = logging.getLogger("rimmodmanager.mod_importer")
@@ -99,13 +98,13 @@ class ModImporter:
                 with open(file_path, 'r', encoding='utf-8') as f:
                     content = f.read().strip()
                 
-                lines = [l.strip() for l in content.split('\n') if l.strip()]
+                lines = [line.strip() for line in content.split('\n') if line.strip()]
                 if lines:
                     # All numeric = workshop IDs
-                    if all(l.isdigit() for l in lines[:10]):
+                    if all(line.isdigit() for line in lines[:10]):
                         return ImportFormat.WORKSHOP_IDS
                     # Contains dots = package IDs
-                    if any('.' in l for l in lines[:10]):
+                    if any('.' in line for line in lines[:10]):
                         return ImportFormat.PLAIN_TEXT
                         
             except IOError:

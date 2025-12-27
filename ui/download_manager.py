@@ -4,7 +4,6 @@ Provides real-time SteamCMD output and download progress.
 Supports parallel downloads for faster mod collection downloads.
 """
 
-import os
 import re
 import shutil
 import subprocess
@@ -19,7 +18,7 @@ from enum import Enum
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QTextEdit, QProgressBar, QGroupBox, QFrame,
+    QTextEdit, QProgressBar, QGroupBox,
     QSplitter, QListWidget, QListWidgetItem, QSpinBox, QComboBox
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QThread
@@ -363,7 +362,6 @@ class LiveDownloadWorker(QThread):
             
             # Read output with timeout
             start_time = time.time()
-            success = False
             
             try:
                 while True:
@@ -389,7 +387,6 @@ class LiveDownloadWorker(QThread):
                             if "Downloading item" in line:
                                 self.item_progress.emit(workshop_id, 20)
                             elif "Success" in line and "Downloaded item" in line:
-                                success = True
                                 self.item_progress.emit(workshop_id, 90)
                             # Parse byte progress
                             progress_match = re.search(r'(\d+)\s*/\s*(\d+)', line)

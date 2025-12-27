@@ -13,13 +13,13 @@ from typing import Optional
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QSplitter,
     QLabel, QPushButton, QComboBox, QLineEdit, QTextEdit,
-    QGroupBox, QFrame, QTabWidget, QFileDialog, QMessageBox,
-    QProgressBar, QStatusBar, QMenuBar, QMenu, QToolBar,
-    QDialog, QDialogButtonBox, QListWidget, QListWidgetItem,
+    QGroupBox, QTabWidget, QFileDialog, QMessageBox,
+    QProgressBar, QStatusBar,
+    QDialog, QDialogButtonBox, QListWidget,
     QInputDialog, QApplication
 )
-from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer
-from PyQt6.QtGui import QAction, QIcon, QColor, QKeySequence, QShortcut
+from PyQt6.QtCore import Qt, pyqtSignal, QTimer
+from PyQt6.QtGui import QAction, QColor, QKeySequence, QShortcut
 
 from config_handler import ConfigHandler
 from game_detector import GameDetector, RimWorldInstallation, InstallationType
@@ -29,8 +29,8 @@ from ui.mod_widgets import (
     DraggableModList, ModDetailsPanel, ModListControls, ConflictWarningWidget,
     ModSearchFilter
 )
-from ui.workshop_browser import WorkshopBrowser, WorkshopDownloadDialog
-from ui.download_manager import DownloadLogWidget, SteamCMDChecker, LiveDownloadWorker
+from ui.workshop_browser import WorkshopBrowser
+from ui.download_manager import DownloadLogWidget, SteamCMDChecker
 
 # Module logger
 log = logging.getLogger("rimmodmanager.ui.main_window")
@@ -280,8 +280,6 @@ class GameLaunchDialog(QDialog):
     
     def _start_detection(self):
         """Detect and launch game."""
-        import shutil
-        
         game_path = self.installation.path
         is_windows = self.installation.is_windows_build
         
@@ -377,8 +375,6 @@ class GameLaunchDialog(QDialog):
     
     def _find_proton(self) -> Optional[str]:
         """Find Proton executable - checks system proton and Steam proton."""
-        import shutil
-        
         # Check for system-installed proton (like proton-cachyos, proton-ge, etc.)
         proton_commands = [
             "proton",           # System proton in PATH
@@ -464,7 +460,6 @@ class GameLaunchDialog(QDialog):
             elif system == 'darwin':  # macOS
                 if is_windows:
                     # Windows build on macOS - need Wine or CrossOver
-                    import shutil
                     if shutil.which("wine") or shutil.which("wine64"):
                         wine_cmd = shutil.which("wine64") or shutil.which("wine")
                         self._log(f"[INFO] Running Windows build with Wine: {wine_cmd}", "#74c0fc")
@@ -2018,7 +2013,6 @@ class MainWindow(QMainWindow):
                 self.available_list.takeItem(row)
             
             # Delete the mod folder
-            import shutil
             if mod.path.exists():
                 shutil.rmtree(mod.path)
             
@@ -2051,7 +2045,6 @@ class MainWindow(QMainWindow):
     def _uninstall_selected_mods(self, mods: list):
         """Uninstall multiple selected mods."""
         from mod_parser import ModSource
-        import shutil
         
         if not mods:
             return
@@ -2095,8 +2088,6 @@ class MainWindow(QMainWindow):
         
         for mod in uninstallable:
             try:
-                mod_name = mod.display_name()
-                
                 # Remove from active list if present
                 self.active_list.remove_mod(mod)
                 
@@ -2406,7 +2397,7 @@ class MainWindow(QMainWindow):
     
     def _import_modlist(self):
         """Import modlist from RimPy, RimSort, or other formats."""
-        from mod_importer import ModImporter, ImportFormat
+        from mod_importer import ModImporter
         
         filepath, _ = QFileDialog.getOpenFileName(
             self, "Import Modlist",
@@ -2459,8 +2450,6 @@ class MainWindow(QMainWindow):
     
     def _apply_imported_modlist(self, result, replace: bool = True):
         """Apply imported modlist to current mod lists."""
-        from mod_importer import ImportResult
-        
         # Build mod lookup
         mod_by_id = {mod.package_id.lower(): mod for mod in self.all_mods}
         
@@ -3149,7 +3138,6 @@ class MainWindow(QMainWindow):
         )
         if filepath:
             import json
-            import shutil
             
             # Copy current config
             try:
@@ -3189,7 +3177,6 @@ class MainWindow(QMainWindow):
         ]
         
         for i, mod in enumerate(active_mods, 1):
-            workshop_id = mod.steam_workshop_id or "local"
             lines.append(f"{i:3}. {mod.display_name()} [{mod.package_id}]")
             if mod.steam_workshop_id:
                 lines.append(f"     Workshop: https://steamcommunity.com/sharedfiles/filedetails/?id={mod.steam_workshop_id}")

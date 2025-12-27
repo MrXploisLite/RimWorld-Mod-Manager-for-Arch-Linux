@@ -11,10 +11,9 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QListWidget, QListWidgetItem, QDialog, QDialogButtonBox,
     QLineEdit, QTextEdit, QGroupBox, QMessageBox, QInputDialog,
-    QTabWidget, QFrame, QSplitter, QComboBox, QCheckBox
+    QTabWidget, QFrame
 )
-from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QFont
+from PyQt6.QtCore import pyqtSignal
 
 from mod_parser import ModProfile, ProfileManager, BackupManager, ModsConfigParser, ModBackup
 
@@ -228,7 +227,7 @@ class ProfilesTab(QWidget):
                 return
             
             current_mods = self._current_mods_getter()
-            profile = self.profile_manager.create_profile(name, current_mods, desc)
+            self.profile_manager.create_profile(name, current_mods, desc)
             self._refresh_list()
             self.profile_saved.emit(name)
             QMessageBox.information(self, "Success", f"Profile '{name}' created with {len(current_mods)} mods")

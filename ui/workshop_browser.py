@@ -12,11 +12,10 @@ from dataclasses import dataclass, field
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QLineEdit, QListWidget, QListWidgetItem, QProgressBar,
-    QSplitter, QFrame, QGroupBox, QCheckBox, QTextEdit,
+    QSplitter, QGroupBox, QCheckBox, QTextEdit,
     QApplication
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QUrl, QThread
-from PyQt6.QtGui import QColor
 
 # Try to import WebEngine, fallback gracefully if not available
 try:
@@ -619,7 +618,7 @@ class WorkshopBrowser(QWidget):
                     collection = details[0]
                     if 'children' in collection:
                         return [str(item['publishedfileid']) for item in collection['children']]
-        except Exception as e:
+        except Exception:
             # API failed, will fall back to HTML parsing
             pass
         

@@ -4,7 +4,6 @@ Parses About/About.xml files and manages mod metadata.
 Includes ModsConfig.xml parsing and profile management.
 """
 
-import os
 import re
 import json
 import logging

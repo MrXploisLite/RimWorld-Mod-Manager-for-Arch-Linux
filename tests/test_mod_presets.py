@@ -10,7 +10,7 @@ from pathlib import Path
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from mod_presets import PresetEncoder, PresetData, create_preset_code, load_preset_code
+from mod_presets import PresetEncoder, create_preset_code, load_preset_code
 
 
 class TestPresetEncoder(unittest.TestCase):

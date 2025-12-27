@@ -8,7 +8,6 @@ import unittest
 import tempfile
 import shutil
 import json
-import os
 from pathlib import Path
 from unittest.mock import patch
 

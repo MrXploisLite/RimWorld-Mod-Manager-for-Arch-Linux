@@ -5,6 +5,22 @@ All notable changes to RimModManager will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2025-12-27
+
+### Added
+- **Dark/Light Theme Toggle**: System/Dark/Light theme options in Settings
+- **Auto-Update Checker**: Checks GitHub releases on startup for new versions
+- **Screenshots in README**: Collapsible gallery showcasing the UI
+
+### Changed
+- **Code Cleanup**: Removed all unused imports and variables
+- **Fixed Ambiguous Variables**: Renamed `l` to `line` in mod_importer.py
+- **Removed Redundant Imports**: Cleaned up duplicate shutil imports in main_window.py
+
+### Fixed
+- All flake8 F401 (unused imports), F841 (unused variables), E741 (ambiguous names) warnings resolved
+- All F811 (redefinition) warnings resolved
+
 ## [0.1.0] - 2025-12-27
 
 ### Added
@@ -52,5 +68,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 | Version | Date | Status |
 |---------|------|--------|
-| 0.1.0 | 2025-12-27 | Current |
+| 0.2.0 | 2025-12-27 | Current |
+| 0.1.0 | 2025-12-27 | Stable |
 | 0.0.7 | 2025-12-25 | Pre-release |

@@ -3,7 +3,6 @@ Workshop Downloader for RimModManager
 SteamCMD integration for downloading Workshop mods anonymously.
 """
 
-import os
 import re
 import shutil
 import subprocess
@@ -117,7 +116,7 @@ class WorkshopDownloader:
         
         # Verify it's executable
         try:
-            result = subprocess.run(
+            subprocess.run(
                 [self.steamcmd_path, "+quit"],
                 capture_output=True,
                 timeout=30

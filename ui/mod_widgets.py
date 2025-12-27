@@ -3,17 +3,16 @@ UI Components for RimModManager
 Custom widgets for mod list, drag-drop, and mod details.
 """
 
-from pathlib import Path
 from typing import Optional
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QListWidget, QListWidgetItem, QFrame, QScrollArea,
-    QAbstractItemView, QMenu, QToolTip, QSizePolicy,
-    QStyledItemDelegate, QStyle, QStyleOptionViewItem,
+    QAbstractItemView, QMenu, QSizePolicy,
+    QStyledItemDelegate, QStyleOptionViewItem, QStyle,
     QLineEdit, QComboBox
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QMimeData, QSize, QRect, QPoint, QEvent, QTimer
-from PyQt6.QtGui import QDrag, QPixmap, QIcon, QPalette, QColor, QAction, QPainter, QBrush, QPen, QFont
+from PyQt6.QtCore import Qt, pyqtSignal, QRect, QEvent, QTimer
+from PyQt6.QtGui import QPixmap, QColor, QAction, QPainter, QBrush, QPen, QFont
 
 from mod_parser import ModInfo, ModSource
 

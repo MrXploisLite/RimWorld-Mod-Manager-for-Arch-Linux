@@ -7,7 +7,7 @@ Author: RimWorld Linux Community
 License: MIT
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 import sys
 import os
@@ -24,7 +24,7 @@ def check_dependencies() -> bool:
     missing = []
     
     try:
-        from PyQt6.QtWidgets import QApplication
+        from PyQt6.QtWidgets import QApplication  # noqa: F401
     except ImportError:
         missing.append("PyQt6")
     
