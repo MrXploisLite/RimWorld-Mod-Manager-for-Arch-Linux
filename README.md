@@ -4,6 +4,7 @@
 
 **The Ultimate Cross-Platform Mod Manager for RimWorld**
 
+[![CI](https://github.com/MrXploisLite/RimModManager/actions/workflows/ci.yml/badge.svg)](https://github.com/MrXploisLite/RimModManager/actions/workflows/ci.yml)
 [![GitHub license](https://img.shields.io/github/license/MrXploisLite/RimModManager?style=flat-square)](https://github.com/MrXploisLite/RimModManager/blob/main/LICENSE)
 [![GitHub issues](https://img.shields.io/github/issues/MrXploisLite/RimModManager?style=flat-square)](https://github.com/MrXploisLite/RimModManager/issues)
 [![GitHub stars](https://img.shields.io/github/stars/MrXploisLite/RimModManager?style=flat-square)](https://github.com/MrXploisLite/RimModManager/stargazers)

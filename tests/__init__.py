@@ -1,0 +1,1 @@
+# RimModManager Test Suite
