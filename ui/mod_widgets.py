@@ -833,6 +833,10 @@ class ModListControls(QWidget):
     move_top = pyqtSignal()
     move_bottom = pyqtSignal()
     auto_sort = pyqtSignal()  # New signal for auto-sort
+    select_all = pyqtSignal()  # Select all items
+    deselect_all = pyqtSignal()  # Deselect all items
+    activate_selected = pyqtSignal()  # Activate selected items
+    deactivate_selected = pyqtSignal()  # Deactivate selected items
     
     def __init__(self, is_active_list: bool = False, parent=None):
         super().__init__(parent)
@@ -844,6 +848,21 @@ class ModListControls(QWidget):
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(4)
+        
+        # Selection buttons (both lists)
+        self.btn_select_all = QPushButton("☑ All")
+        self.btn_select_all.setToolTip("Select all mods (Ctrl+A)")
+        self.btn_select_all.setFixedWidth(50)
+        self.btn_select_all.clicked.connect(self.select_all.emit)
+        layout.addWidget(self.btn_select_all)
+        
+        self.btn_deselect = QPushButton("☐")
+        self.btn_deselect.setToolTip("Deselect all")
+        self.btn_deselect.setFixedWidth(30)
+        self.btn_deselect.clicked.connect(self.deselect_all.emit)
+        layout.addWidget(self.btn_deselect)
+        
+        layout.addWidget(self._create_separator())
         
         if self.is_active_list:
             # Active list controls
@@ -873,6 +892,12 @@ class ModListControls(QWidget):
             
             layout.addStretch()
             
+            # Batch deactivate selected
+            self.btn_deactivate_sel = QPushButton("➖ Selected")
+            self.btn_deactivate_sel.setToolTip("Deactivate selected mods")
+            self.btn_deactivate_sel.clicked.connect(self.deactivate_selected.emit)
+            layout.addWidget(self.btn_deactivate_sel)
+            
             # Auto-sort button
             self.btn_auto_sort = QPushButton("🔄 Auto-Sort")
             self.btn_auto_sort.setToolTip("Automatically sort mods by dependencies (loadBefore/loadAfter)")
@@ -884,12 +909,25 @@ class ModListControls(QWidget):
             self.btn_deactivate_all.clicked.connect(self.deactivate_all.emit)
             layout.addWidget(self.btn_deactivate_all)
         else:
-            # Inactive list controls
+            # Inactive list controls - batch activate
+            self.btn_activate_sel = QPushButton("➕ Selected")
+            self.btn_activate_sel.setToolTip("Activate selected mods")
+            self.btn_activate_sel.clicked.connect(self.activate_selected.emit)
+            layout.addWidget(self.btn_activate_sel)
+            
+            layout.addStretch()
+            
             self.btn_activate_all = QPushButton("Activate All")
             self.btn_activate_all.clicked.connect(self.activate_all.emit)
             layout.addWidget(self.btn_activate_all)
-            
-            layout.addStretch()
+    
+    def _create_separator(self):
+        """Create a visual separator."""
+        sep = QFrame()
+        sep.setFrameShape(QFrame.Shape.VLine)
+        sep.setFrameShadow(QFrame.Shadow.Sunken)
+        sep.setFixedWidth(2)
+        return sep
 
 
 class ConflictWarningWidget(QFrame):

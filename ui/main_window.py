@@ -1352,6 +1352,14 @@ class MainWindow(QMainWindow):
         self.active_controls.move_bottom.connect(self.active_list.move_selected_to_bottom)
         self.active_controls.auto_sort.connect(self._auto_sort_mods)
         
+        # Batch selection controls
+        self.available_controls.select_all.connect(self.available_list.selectAll)
+        self.available_controls.deselect_all.connect(self.available_list.clearSelection)
+        self.available_controls.activate_selected.connect(self._activate_selected)
+        self.active_controls.select_all.connect(self.active_list.selectAll)
+        self.active_controls.deselect_all.connect(self.active_list.clearSelection)
+        self.active_controls.deactivate_selected.connect(self._deactivate_selected)
+        
         # List changes
         self.active_list.mods_changed.connect(self._check_conflicts)
         
@@ -1780,6 +1788,22 @@ class MainWindow(QMainWindow):
         self._update_counts()
         self._check_conflicts()
     
+    def _activate_selected(self):
+        """Activate selected mods from available list."""
+        selected = self.available_list.get_selected_mods()
+        if not selected:
+            self.status_bar.showMessage("No mods selected")
+            return
+        
+        for mod in selected:
+            self.available_list.remove_mod(mod)
+            mod.is_active = True
+            self.active_list.add_mod(mod)
+        
+        self._update_counts()
+        self._check_conflicts()
+        self.status_bar.showMessage(f"Activated {len(selected)} mods")
+    
     def _deactivate_all(self):
         """Deactivate all active mods."""
         mods = self.active_list.get_mods()
@@ -1790,6 +1814,22 @@ class MainWindow(QMainWindow):
         
         self._update_counts()
         self._check_conflicts()
+    
+    def _deactivate_selected(self):
+        """Deactivate selected mods from active list."""
+        selected = self.active_list.get_selected_mods()
+        if not selected:
+            self.status_bar.showMessage("No mods selected")
+            return
+        
+        for mod in selected:
+            self.active_list.remove_mod(mod)
+            mod.is_active = False
+            self.available_list.add_mod(mod)
+        
+        self._update_counts()
+        self._check_conflicts()
+        self.status_bar.showMessage(f"Deactivated {len(selected)} mods")
     
     def _check_conflicts(self):
         """Check for conflicts in active mods."""
