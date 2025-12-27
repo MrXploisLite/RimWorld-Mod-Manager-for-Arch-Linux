@@ -1,15 +1,12 @@
 name: Build and Release
 
 on:
-  push:
-    tags:
-      - 'v*'
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version tag (e.g., v0.0.7)'
+        description: 'Version (e.g., 0.1.0)'
         required: true
-        default: 'v0.0.7'
+        default: '0.1.0'
 
 jobs:
   build-linux:
@@ -25,7 +22,8 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libxcb-cursor0
+          sudo apt-get install -y libxcb-cursor0 ruby ruby-dev rubygems build-essential
+          sudo gem install --no-document fpm
           python -m pip install --upgrade pip
           pip install PyQt6 PyQt6-WebEngine pyinstaller
       
@@ -35,21 +33,55 @@ jobs:
             --onefile \
             --windowed \
             --add-data "resources:resources" \
-            --icon resources/icon.svg \
             --hidden-import PyQt6.QtWebEngineWidgets \
             --hidden-import PyQt6.QtWebEngineCore \
             main.py
       
-      - name: Package
+      - name: Create .tar.gz
         run: |
           cd dist
           tar -czvf RimModManager-Linux-x64.tar.gz RimModManager
       
-      - name: Upload artifact
+      - name: Create .deb package
+        run: |
+          mkdir -p deb-package/usr/bin
+          mkdir -p deb-package/usr/share/applications
+          mkdir -p deb-package/usr/share/icons/hicolor/scalable/apps
+          
+          cp dist/RimModManager deb-package/usr/bin/
+          chmod +x deb-package/usr/bin/RimModManager
+          cp resources/icon.svg deb-package/usr/share/icons/hicolor/scalable/apps/rimmodmanager.svg
+          
+          cat > deb-package/usr/share/applications/rimmodmanager.desktop << EOF
+          [Desktop Entry]
+          Name=RimModManager
+          Comment=Universal mod manager for RimWorld
+          Exec=/usr/bin/RimModManager
+          Icon=rimmodmanager
+          Terminal=false
+          Type=Application
+          Categories=Game;Utility;
+          EOF
+          
+          fpm -s dir -t deb \
+            -n rimmodmanager \
+            -v ${{ github.event.inputs.version }} \
+            --description "Universal mod manager for RimWorld" \
+            --url "https://github.com/MrXploisLite/RimModManager" \
+            --maintainer "MrXploisLite" \
+            --license "MIT" \
+            -C deb-package \
+            .
+          
+          mv *.deb dist/RimModManager-Linux-x64.deb
+      
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: linux-build
-          path: dist/RimModManager-Linux-x64.tar.gz
+          path: |
+            dist/RimModManager-Linux-x64.tar.gz
+            dist/RimModManager-Linux-x64.deb
 
   build-windows:
     runs-on: windows-latest
@@ -76,16 +108,18 @@ jobs:
             --hidden-import PyQt6.QtWebEngineCore `
             main.py
       
-      - name: Package
+      - name: Create .zip
         run: |
           cd dist
           Compress-Archive -Path RimModManager.exe -DestinationPath RimModManager-Windows-x64.zip
       
-      - name: Upload artifact
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: windows-build
-          path: dist/RimModManager-Windows-x64.zip
+          path: |
+            dist/RimModManager-Windows-x64.zip
+            dist/RimModManager.exe
 
   build-macos:
     runs-on: macos-latest
@@ -112,7 +146,7 @@ jobs:
             --hidden-import PyQt6.QtWebEngineCore \
             main.py
       
-      - name: Package
+      - name: Create .zip
         run: |
           cd dist
           zip -r RimModManager-macOS-x64.zip RimModManager.app || zip -r RimModManager-macOS-x64.zip RimModManager
@@ -136,43 +170,46 @@ jobs:
         with:
           path: artifacts
       
-      - name: Get version
-        id: version
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
-          else
-            echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-          fi
+      - name: List artifacts
+        run: find artifacts -type f
       
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: ${{ steps.version.outputs.VERSION }}
-          name: RimModManager ${{ steps.version.outputs.VERSION }} (Unstable)
+          tag_name: v${{ github.event.inputs.version }}
+          name: RimModManager v${{ github.event.inputs.version }}
           draft: false
           prerelease: true
+          generate_release_notes: true
           body: |
-            ## ⚠️ Unstable Release - v0.0.7
+            ## 📦 RimModManager v${{ github.event.inputs.version }}
             
-            **This is an early development release. Expect bugs and incomplete features.**
+            **Universal mod manager for RimWorld**
             
             ### 📥 Downloads
-            - **Windows**: `RimModManager-Windows-x64.zip` - Extract and run `RimModManager.exe`
-            - **Linux**: `RimModManager-Linux-x64.tar.gz` - Extract and run `./RimModManager`
-            - **macOS**: `RimModManager-macOS-x64.zip` - Extract and run the app
+            
+            | Platform | File | Description |
+            |----------|------|-------------|
+            | 🪟 Windows | `RimModManager-Windows-x64.zip` | Extract and run `RimModManager.exe` |
+            | 🪟 Windows | `RimModManager.exe` | Standalone executable |
+            | 🐧 Linux | `RimModManager-Linux-x64.tar.gz` | Extract and run `./RimModManager` |
+            | 🐧 Linux | `RimModManager-Linux-x64.deb` | Install with `sudo dpkg -i *.deb` |
+            | 🍎 macOS | `RimModManager-macOS-x64.zip` | Extract and run the app |
             
             ### 🔧 Requirements
-            - **SteamCMD** is required for Workshop downloads
-              - Windows: [Download](https://steamcdn-a.akamaihd.net/client/installer/steamcmd.zip) or `choco install steamcmd`
-              - Linux: `yay -S steamcmd` (Arch) or `sudo apt install steamcmd` (Debian/Ubuntu)
-              - macOS: `brew install steamcmd`
+            
+            **SteamCMD** is required for Workshop downloads:
+            - **Windows**: [Download](https://steamcdn-a.akamaihd.net/client/installer/steamcmd.zip) or `choco install steamcmd`
+            - **Linux (Arch)**: `yay -S steamcmd`
+            - **Linux (Debian/Ubuntu)**: `sudo apt install steamcmd`
+            - **macOS**: `brew install steamcmd`
             
             ### ✨ Features
             - Detect RimWorld installations (Steam, Proton, Wine, GOG, standalone)
             - Drag-and-drop mod load order management
             - Auto-sort mods by dependencies
-            - Download Workshop mods via SteamCMD (parallel downloads)
+            - Batch select/activate/deactivate mods
+            - Download Workshop mods via SteamCMD
             - Embedded Steam Workshop browser
             - Mod profiles and backups
             - Conflict detection and resolution
@@ -180,20 +217,9 @@ jobs:
             ### 🐛 Found a Bug?
             - **Discord**: `romyr911`
             - **GitHub Issues**: [Report here](https://github.com/MrXploisLite/RimModManager/issues)
-            
-            ### ⚡ Running from Source (Alternative)
-            ```bash
-            # Clone repo
-            git clone https://github.com/MrXploisLite/RimModManager.git
-            cd RimModManager
-            
-            # Install dependencies
-            pip install PyQt6 PyQt6-WebEngine
-            
-            # Run
-            python main.py
-            ```
           files: |
             artifacts/linux-build/RimModManager-Linux-x64.tar.gz
+            artifacts/linux-build/RimModManager-Linux-x64.deb
             artifacts/windows-build/RimModManager-Windows-x64.zip
+            artifacts/windows-build/RimModManager.exe
             artifacts/macos-build/RimModManager-macOS-x64.zip
