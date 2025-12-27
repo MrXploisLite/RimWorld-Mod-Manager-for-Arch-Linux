@@ -89,9 +89,9 @@ jobs:
           cp dist/RimModManager AppDir/usr/bin/
           chmod +x AppDir/usr/bin/RimModManager
           
-          # Convert SVG to PNG for AppImage (use ImageMagick)
-          sudo apt-get install -y imagemagick
-          convert -background none -resize 256x256 resources/icon.svg AppDir/usr/share/icons/hicolor/256x256/apps/rimmodmanager.png
+          # Convert SVG to PNG for AppImage (use librsvg which handles fonts better)
+          sudo apt-get install -y librsvg2-bin
+          rsvg-convert -w 256 -h 256 resources/icon.svg -o AppDir/usr/share/icons/hicolor/256x256/apps/rimmodmanager.png
           cp AppDir/usr/share/icons/hicolor/256x256/apps/rimmodmanager.png AppDir/rimmodmanager.png
           
           # Desktop file
