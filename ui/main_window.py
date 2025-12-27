@@ -2857,26 +2857,7 @@ class MainWindow(QMainWindow):
         self.main_tabs.setCurrentIndex(0)
         self.status_bar.showMessage("Mod list refreshed with newly downloaded mods!")
     
-    def _on_download_progress(self, task: DownloadTask):
-        """Handle download progress update."""
-        self.status_bar.showMessage(f"Downloading {task.workshop_id}: {task.status.value}")
-    
-    def _on_download_finished(self, task: DownloadTask):
-        """Handle download completion."""
-        self.progress_bar.setValue(self.progress_bar.value() + 1)
-        self.status_bar.showMessage(f"Downloaded mod {task.workshop_id}")
-        
-        # Update workshop browser
-        if self.workshop_browser:
-            self.workshop_browser.mark_downloaded(task.workshop_id)
-        
-        if self.progress_bar.value() >= self.progress_bar.maximum():
-            self.progress_bar.setVisible(False)
-            self._scan_mods()  # Rescan to pick up new mods
-    
-    def _on_download_error(self, task: DownloadTask, error: str):
-        """Handle download error."""
-        self.status_bar.showMessage(f"Download failed: {error}")
+
     
     def _open_saves_folder(self):
         """Open the saves folder in file manager."""
